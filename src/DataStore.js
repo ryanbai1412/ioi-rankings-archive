@@ -589,7 +589,7 @@ export default new function () {
             $("#ConnectionStatus_label").html("Loading");
         } else if (state == 1) {
             $("#ConnectionStatus_box").attr("data-status", "connected");
-            $("#ConnectionStatus_text").html("The archived data are successfully loaded");
+            $("#ConnectionStatus_text").html("The archived data has been successfully loaded");
             $("#ConnectionStatus_label").html("Archived");
         } else if (state == 2) {
             $("#ConnectionStatus_box").attr("data-status", "init_error");

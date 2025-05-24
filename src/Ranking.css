@@ -1190,10 +1190,9 @@ abbr {
 
 #ConnectionStatus_text {
     display: none;
-    position: absolute;
-    top: 2em;
-    right: 0;
-    width: 240px;
+    position: fixed;
+    top: 2.5em;
+    right: 0.5em;
     padding: 0.5em;
     margin-top: -1px;
     z-index: 1;
