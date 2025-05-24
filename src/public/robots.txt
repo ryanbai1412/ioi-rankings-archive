@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://ioirankings.pages.dev/sitemap.txt
+Sitemap: https://ioirankings.com/sitemap.txt
