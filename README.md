@@ -1,5 +1,7 @@
 # IOI Rankings Archive
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/ryanbai1412/ioi-rankings-archive)
+
 An archive of past IOI rankings, in the CMS format. You can visit the website [here](https://ioirankings.com).
 
 The data obtained was scraped using [CMS Ranking Archiver](https://github.com/ioi/cms-ranking-archiver).
