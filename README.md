@@ -1,6 +1,6 @@
 # IOI Rankings Archive
 
-An archive of past IOI rankings, in the CMS format. You can visit the website [here](https://ioirankings.pages.dev).
+An archive of past IOI rankings, in the CMS format. You can visit the website [here](https://ioirankings.com).
 
 The data obtained was scraped using [CMS Ranking Archiver](https://github.com/ioi/cms-ranking-archiver).
 Please contact me (open a GitHub issue) if you have data for other years.
