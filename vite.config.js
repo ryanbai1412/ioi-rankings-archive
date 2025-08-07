@@ -30,9 +30,13 @@ const config = {
         favicon: "img/favicon.png",
         logo: "img/logo.png"
     },
+    "2025": {
+        favicon: "img/favicon.ico",
+        "logo": "img/logo.png",
+    },
 };
 
-const years = [2017, 2019, 2020, 2021, 2022, 2023, 2024];
+const years = [2017, 2019, 2020, 2021, 2022, 2023, 2024, 2025];
 
 function patchHtmlPlugin() {
     function transformIndexHtml(src, path) {
