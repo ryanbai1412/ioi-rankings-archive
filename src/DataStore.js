@@ -34,7 +34,7 @@ export function round_to_str(value, ndigits) {
     }
 }
 
-export default new function () {
+window.DataStore = new function () {
     var self = this;
 
     // MODIFICATION
@@ -832,3 +832,5 @@ export default new function () {
         delete old_data["selected"];
     });
 };
+
+export default DataStore;

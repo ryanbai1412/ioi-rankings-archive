@@ -347,7 +347,7 @@ export default new function () {
             <td>" + time + "</td> \
             <td>" + round_to_str(submission['score'], score_precision) + "</td> \
             <td>" + round_to_str(submission.cumulative_score, score_precision) + "</td>\
-            " + (submission["extra"].length > 0 ? "<td>" + submission["extra"].join("</td><td>") + "</td>" : "") + " \
+            " + submission["extra"].map(s => round_to_str(parseFloat(s), score_precision)).map(s => `<td>${s}</td>`).join("") + " \
         </tr>";
             }
         }
