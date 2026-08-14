@@ -23,6 +23,7 @@ import TimeView from "./TimeView.js";
 import TeamSearch from "./TeamSearch.js";
 import Overview from "./Overview.js";
 import Scoreboard from "./Scoreboard.js";
+import Timeline from "./Timeline.js";
 
 if (!window.console) {
     window.console = new Object();
@@ -54,5 +55,6 @@ $(document).ready(function() {
         });
         Overview.init();
         Scoreboard.init();
+        Timeline.init();
     });
 });

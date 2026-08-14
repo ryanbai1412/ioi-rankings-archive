@@ -82,13 +82,174 @@ abbr {
 
 #InnerFrame {
     position: absolute;
-    top: 3em;
+    top: calc(3em + 46px);
     left: 220px;
     right: 0;
     bottom: 0;
     margin: 2px 0 0 2px;
     padding: 0 3em;
     overflow-y: scroll;
+}
+
+
+/******************************************************************************\
+|                                                                              |
+|                                    Timeline                                  |
+|                                    --------                                  |
+\******************************************************************************/
+
+
+#Timeline {
+    position: absolute;
+    top: 3em;
+    left: 220px;
+    right: 0;
+    height: 46px;
+    box-sizing: border-box;
+    margin: 2px 0 0 2px;
+    padding: 0 3em;
+    display: flex;
+    align-items: center;
+    z-index: 9;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+}
+
+#Timeline_track {
+    position: relative;
+    flex: 1 1 auto;
+    height: 100%;
+}
+
+#Timeline_slider {
+    position: absolute;
+    top: 10px;
+    left: 0;
+    width: 100%;
+    height: 14px;
+    margin: 0;
+    padding: 0;
+    background: transparent;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    cursor: pointer;
+    outline: none;
+}
+
+#Timeline_slider::-webkit-slider-runnable-track {
+    height: 4px;
+    border-radius: 2px;
+    background-color: #D2D2D6;
+}
+
+#Timeline_slider::-moz-range-track {
+    height: 4px;
+    border-radius: 2px;
+    background-color: #D2D2D6;
+}
+
+#Timeline_slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    margin-top: -5px;
+    border: 0;
+    border-radius: 50%;
+    background-color: #1745ff;
+    box-shadow: 0 0 2px 0 gray;
+}
+
+#Timeline_slider::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border: 0;
+    border-radius: 50%;
+    background-color: #1745ff;
+    box-shadow: 0 0 2px 0 gray;
+}
+
+#Timeline_ticks {
+    position: absolute;
+    top: 10px;
+    /* The thumb is 14px wide, so the track the ticks refer to is inset by 7px */
+    left: 7px;
+    right: 7px;
+}
+
+.Timeline_tick {
+    position: absolute;
+    top: 0;
+}
+
+.Timeline_tick_mark {
+    position: absolute;
+    top: 0;
+    left: -1px;
+    width: 2px;
+    height: 14px;
+    background-color: #B4B4B8;
+}
+
+.Timeline_tick_label {
+    position: absolute;
+    top: 16px;
+    left: 0;
+    transform: translateX(-50%);
+    color: #666666;
+    font-size: 0.8em;
+    line-height: 1em;
+    white-space: nowrap;
+}
+
+.Timeline_tick:first-child .Timeline_tick_label {
+    transform: none;
+}
+
+.Timeline_tick:last-child .Timeline_tick_label {
+    transform: translateX(-100%);
+}
+
+#Timeline_label {
+    flex: 0 0 auto;
+    width: 7em;
+    margin-left: 1em;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    color: #666666;
+}
+
+#Timeline.live #Timeline_label {
+    color: #1745ff;
+    font-weight: bold;
+}
+
+#Timeline_controls {
+    flex: 0 0 auto;
+    margin-left: 0.75em;
+    white-space: nowrap;
+}
+
+#Timeline_controls button {
+    width: 2.2em;
+    height: 1.8em;
+    margin-left: 0.25em;
+    border: 1px solid #1745ff;
+    border-radius: 4px;
+    padding: 0;
+    font: inherit;
+    line-height: 1.8em;
+    color: #1745ff;
+    background-color: #FFFFFF;
+    cursor: pointer;
+}
+
+#Timeline_controls button:hover {
+    color: #FFFFFF;
+    background-color: #1745ff;
 }
 
 

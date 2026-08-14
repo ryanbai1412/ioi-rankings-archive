@@ -448,7 +448,34 @@ export default new function () {
 
     // Update the rank cell for the given user
     self.update_rank = function (user) {
-        $(user.row).find(".rank").text(self.format_rank(user));
+        $(user.row).find(".rank")
+            .text(self.format_rank(user))
+            .attr("class", "rank medal-" + Config.get_medal(user["rank"]));
+    }
+
+    // Rewrite all the score cells of the given user
+    self.refresh_user = function (user) {
+        $(user["row"]).children("td.score").each(function () {
+            var $this = $(this);
+            var score = user[$this.data("sort_key")];
+            var max_score;
+
+            if ($this.hasClass("global")) {
+                max_score = DataStore.global_max_score;
+                $this.text(round_to_str(score, DataStore.global_score_precision));
+            } else if ($this.hasClass("contest")) {
+                var contest = DataStore.contests[$this.data("contest")];
+                max_score = contest["max_score"];
+                $this.text(round_to_str(score, contest["score_precision"]));
+            } else if ($this.hasClass("task")) {
+                var task = DataStore.tasks[$this.data("task")];
+                max_score = task["max_score"];
+                $this.text(round_to_str(score, task["score_precision"]));
+            }
+
+            $this.removeClass("score_0 score_0_10 score_10_20 score_20_30 score_30_40 score_40_50 score_50_60 score_60_70 score_70_80 score_80_90 score_90_100 score_100");
+            $this.addClass(self.get_score_class(score, max_score));
+        });
     }
 
     // Sort the scoreboard using the column with the given index.
