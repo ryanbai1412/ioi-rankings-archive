@@ -301,6 +301,10 @@ window.DataStore = new function () {
             } else {
                 data.display_key = key.slice(0, 3) + key.charAt(key.length - 1);
             }
+        } else if (/^IOI\d\d$/.test(key)) {
+            // MODIFICATION - the IOI 2026 mixed teams are IOI1..IOI4, so separate
+            // the team digit from the contestant digit
+            data.display_key = key.slice(0, 4) + "_" + key.charAt(4);
         } else {
             data.display_key = key;
         }
