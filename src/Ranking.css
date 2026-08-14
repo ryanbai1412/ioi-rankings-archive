@@ -273,27 +273,52 @@ abbr {
     box-sizing: content-box;
     top: 0;
     left: 420px;
-    height: 2em;
-    line-height: 2em;
+    height: 1.3em;
+    line-height: 1.3em;
     margin: 0.5em;
-    padding: 0 0.75em;
+    padding: 0.25em 20px;
     z-index: 401;
-    border-radius: 0.5em;
+    border: 1px solid #1745ff;
+    border-radius: 4px;
     font: inherit;
+    color: #1745ff;
+    background-color: #FFFFFF;
     cursor: pointer;
     white-space: nowrap;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    -o-user-select: none;
     user-select: none;
 }
 
+#SelectionFilter:hover {
+    background-color: rgba(255, 255, 255, 0.5);
+}
+
+#SelectionFilter.on {
+    color: #FFFFFF;
+    background-color: #1745ff;
+}
+
 #SelectionFilter.disabled {
-    opacity: 0.5;
+    border-color: #BBBBBB;
+    color: #999999;
+    background-color: #F4F4F4;
     cursor: default;
 }
 
+/* The pill itself carries the checked state */
 #SelectionFilter input {
-    margin: 0 0.4em 0 0;
-    vertical-align: -0.1em;
-    cursor: inherit;
+    display: none;
+}
+
+#SelectionFilter_count:not(:empty)::before {
+    content: " (";
+}
+
+#SelectionFilter_count:not(:empty)::after {
+    content: ")";
 }
 
 #Scoreboard_body tr.user.filtered_out {

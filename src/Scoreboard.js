@@ -276,6 +276,7 @@ export default new function () {
 
         // Filtering when nothing is selected would show an empty scoreboard
         $("#SelectionFilter")
+            .toggleClass("on", self.filtering)
             .toggleClass("disabled", count == 0)
             .attr("title", count == 0 ? "Select contestants first" : null);
         $("#SelectionFilter_checkbox")
