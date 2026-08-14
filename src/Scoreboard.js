@@ -255,6 +255,7 @@ export default new function () {
             $(user["row"]).toggleClass("filtered_out", self.is_filtered_out(user));
         }
 
+        self.update_ranks();
         self.update_filter_ui();
     };
 
@@ -421,7 +422,10 @@ export default new function () {
     // Get the rank for the current scoreboard order
     self.get_local_rank = function (user) {
         const sort_key = self.sort_key;
-        return self.user_list.filter(u => u[sort_key] > user[sort_key]).length + 1;
+        const list = self.filtering
+            ? self.user_list.filter(u => !self.is_filtered_out(u))
+            : self.user_list;
+        return list.filter(u => u[sort_key] > user[sort_key]).length + 1;
     }
 
     // Get what the rank should look like for the given user
@@ -432,6 +436,12 @@ export default new function () {
             return global_rank.toString();
         } else {
             return `${local_rank} (${global_rank})`;
+        }
+    }
+
+    self.update_ranks = function () {
+        for (const user of self.user_list) {
+            self.update_rank(user);
         }
     }
 
