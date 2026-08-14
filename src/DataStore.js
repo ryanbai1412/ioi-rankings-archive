@@ -301,6 +301,10 @@ window.DataStore = new function () {
             } else {
                 data.display_key = key.slice(0, 3) + key.charAt(key.length - 1);
             }
+        } else if (/^IOI\d\d$/.test(key)) {
+            // MODIFICATION - the IOI 2026 mixed teams are IOI1..IOI4, so separate
+            // the team digit from the contestant digit
+            data.display_key = key.slice(0, 4) + "_" + key.charAt(4);
         } else {
             data.display_key = key;
         }
@@ -511,22 +515,17 @@ window.DataStore = new function () {
 
     ////// Stats
 
-    // simple fuzzy search
-    self.normalize_fuzzy_name = function (name) {
-        const arr = name.split(" ");
-        return arr[0] + " " + arr[arr.length - 1];
-    };
+    self.search_stats_person = function (u_key) {
+        const id = self.stats_people[u_key];
 
-    self.search_stats_person = function (name) {
-        return self.stats_people[name] || self.stats_people_fuzzy[self.normalize_fuzzy_name(name)];
+        return id === undefined ? undefined : "https://stats.ioinformatics.org/people/" + id;
     };
 
     self.init_stats = function () {
         {
-            const data = stats;
+            const data = stats[self.year] || {};
 
             self.stats_people = data;
-            self.stats_people_fuzzy = Object.fromEntries(Object.entries(data).map(([k, v]) => [self.normalize_fuzzy_name(k), v]));
             self.inits_todo -= 1;
             if (self.inits_todo == 0) {
                 self.init_scores();
@@ -536,8 +535,7 @@ window.DataStore = new function () {
         //     url: Config.get_stats_url(),
         //     dataType: "json",
         //     success: function (data, status, xhr) {
-        //         self.stats_people = data;
-        //         self.stats_people_fuzzy = Object.fromEntries(Object.entries(data).map(([k, v]) => [self.normalize_fuzzy_name(k), v]));
+        //         self.stats_people = data[self.year] || {};
         //         self.inits_todo -= 1;
         //         if (self.inits_todo == 0) {
         //             self.init_scores();
