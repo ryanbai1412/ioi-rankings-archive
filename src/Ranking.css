@@ -267,27 +267,33 @@ abbr {
     outline: 0;
 }
 
-#TeamFilter_button {
+#TeamFilter {
     position: absolute;
     -moz-box-sizing: content-box;
     box-sizing: content-box;
     top: 0;
     left: 420px;
     height: 2em;
+    line-height: 2em;
     margin: 0.5em;
-    border: 0;
     padding: 0 0.75em;
     z-index: 401;
     border-radius: 0.5em;
     font: inherit;
-    background-color: #FFFFFF;
     cursor: pointer;
-    outline: 0;
+    white-space: nowrap;
+    user-select: none;
 }
 
-#TeamFilter_button.active {
-    background-color: #00A3DA;
-    color: white;
+#TeamFilter.disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+#TeamFilter input {
+    margin: 0 0.4em 0 0;
+    vertical-align: -0.1em;
+    cursor: inherit;
 }
 
 #TeamSearch_footer {
@@ -314,11 +320,6 @@ abbr {
 #TeamSearch_footer button:disabled {
     opacity: 0.5;
     cursor: default;
-}
-
-#TeamSearch_footer button#TeamSearch_apply {
-    background-color: #00A3DA;
-    color: white;
 }
 
 #TeamSearch_count {

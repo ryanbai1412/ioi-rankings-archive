@@ -31,17 +31,8 @@ export default new function () {
             self.show();
         });
 
-        $("#TeamFilter_button").click(function () {
-            if (self.filtering) {
-                self.set_filtering(false);
-            } else {
-                self.show();
-            }
-        });
-
-        $("#TeamSearch_apply").click(function () {
-            self.set_filtering(true);
-            self.hide();
+        $("#TeamFilter_checkbox").change(function () {
+            self.set_filtering($(this).prop("checked"));
         });
 
         $("#TeamSearch_clear").click(function () {
@@ -196,6 +187,8 @@ export default new function () {
         }
 
         if (self.filtering) {
+            // Filtering to no team at all would show an empty scoreboard
+            self.filtering = self.selected_teams().size > 0;
             self.apply_filter();
         }
         self.update_filter_ui();
@@ -239,11 +232,13 @@ export default new function () {
     self.update_filter_ui = function () {
         var count = self.selected_teams().size;
 
-        $("#TeamFilter_button")
-            .toggleClass("active", self.filtering)
-            .text(self.filtering ? "Showing " + count + " team" + (count == 1 ? "" : "s") + " \u00D7" : "Filter Teams");
+        $("#TeamFilter")
+            .toggleClass("disabled", count == 0)
+            .attr("title", count == 0 ? "Select one or more teams first" : null);
+        $("#TeamFilter_checkbox")
+            .prop("checked", self.filtering)
+            .prop("disabled", count == 0);
         $("#TeamSearch_count").text(count + " team" + (count == 1 ? "" : "s") + " selected");
-        $("#TeamSearch_apply").prop("disabled", count == 0);
     };
 
     self.show = function () {
