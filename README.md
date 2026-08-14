@@ -17,3 +17,6 @@ In any case, it is important that such data is preserved, for a more complete re
 
 However, as CMS instances from old contests go down and are no longer accessible, some of this data is permanently lost.
 This project aims to preserve as much of that data as possible, while also offering various quality of life improvements such as a more standardized format and links to the stats.ioinformatics.org pages for contestants.
+
+Those links live in `src/stats.json`, which maps the CMS user keys of each year to stats.ioinformatics.org people ids.
+Run `python3 scripts/build_stats.py` to regenerate it after adding a year.

@@ -170,7 +170,7 @@ export default new function () {
             const name = self.user["f_name"] + " " + self.user["l_name"];
 
             if (DataStore.stats_people) {
-                href = DataStore.search_stats_person(name);
+                href = DataStore.search_stats_person(self.user_id);
                 if (!href) {
                     console.warn("Couldn't find stats link for", self.user);
                 }
