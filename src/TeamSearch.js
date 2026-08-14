@@ -190,7 +190,7 @@ export default new function () {
         var search_text = $("#TeamSearch_input").val();
 
         if (search_text == "") {
-            $('div.item', self.t_body).removeClass("hidden");
+            $('div.item', self.body).removeClass("hidden");
         } else {
             // FIXME We could store the lowercased name of the team on the divs
             // and then just use a query like [attribute*="value"] (with value
