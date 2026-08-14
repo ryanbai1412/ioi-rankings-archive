@@ -97,7 +97,9 @@ export default new function () {
     };
 
     self.get_face_url = function (u_key) {
-        return "faces/" + u_key + ".png";
+        var ext = (DataStore.asset_config && DataStore.asset_config["face_ext"]) || "png";
+
+        return "faces/" + u_key + "." + ext;
     };
 
     self.get_submissions_url = function (u_key) {
