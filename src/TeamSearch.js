@@ -18,33 +18,13 @@
 import $ from "jquery";
 import DataStore from "./DataStore.js";
 import Config from "./Config.js";
-import Scoreboard from "./Scoreboard.js";
 
 export default new function () {
     var self = this;
 
-    // Whether the scoreboard is restricted to the selected teams
-    self.filtering = false;
-
     self.init = function (callback) {
         $("#TeamSearch_input").focus(function () {
             self.show();
-        });
-
-        $("#TeamFilter_checkbox").change(function () {
-            self.set_filtering($(this).prop("checked"));
-        });
-
-        $("#TeamSearch_clear").click(function () {
-            // Turn the filter off first, so that deselecting the users doesn't
-            // re-filter the whole scoreboard once per user
-            self.filtering = false;
-
-            for (var u_id in DataStore.users) {
-                DataStore.set_selected(u_id, false);
-            }
-
-            self.set_filtering(false);
         });
 
         $("#TeamSearch_bg").click(function (event) {
@@ -120,7 +100,6 @@ export default new function () {
 
         self.generate();
         self.update();
-        self.update_filter_ui();
 
         DataStore.select_events.add(self.select_handler);
         callback();
@@ -186,13 +165,6 @@ export default new function () {
             self.sel[t_id] -= 1;
         }
 
-        if (self.filtering) {
-            // Filtering to no team at all would show an empty scoreboard
-            self.filtering = self.selected_teams().size > 0;
-            self.apply_filter();
-        }
-        self.update_filter_ui();
-
         var $elem = $("div.item[data-team=" + t_id + "] input[type=checkbox]", self.body);
         if (self.sel[t_id] == self.cnt[t_id]) {
             $elem.prop("checked", true);
@@ -204,41 +176,6 @@ export default new function () {
             $elem.prop("checked", false);
             $elem.prop("indeterminate", false);
         }
-    };
-
-    // The teams having at least one selected member
-    self.selected_teams = function () {
-        var teams = new Set();
-
-        for (var t_id in self.sel) {
-            if (self.sel[t_id] > 0) {
-                teams.add(t_id);
-            }
-        }
-
-        return teams;
-    };
-
-    self.apply_filter = function () {
-        Scoreboard.set_team_filter(self.filtering ? self.selected_teams() : null);
-    };
-
-    self.set_filtering = function (flag) {
-        self.filtering = flag;
-        self.apply_filter();
-        self.update_filter_ui();
-    };
-
-    self.update_filter_ui = function () {
-        var count = self.selected_teams().size;
-
-        $("#TeamFilter")
-            .toggleClass("disabled", count == 0)
-            .attr("title", count == 0 ? "Select one or more teams first" : null);
-        $("#TeamFilter_checkbox")
-            .prop("checked", self.filtering)
-            .prop("disabled", count == 0);
-        $("#TeamSearch_count").text(count + " team" + (count == 1 ? "" : "s") + " selected");
     };
 
     self.show = function () {

@@ -267,7 +267,7 @@ abbr {
     outline: 0;
 }
 
-#TeamFilter {
+#SelectionFilter {
     position: absolute;
     -moz-box-sizing: content-box;
     box-sizing: content-box;
@@ -285,46 +285,15 @@ abbr {
     user-select: none;
 }
 
-#TeamFilter.disabled {
+#SelectionFilter.disabled {
     opacity: 0.5;
     cursor: default;
 }
 
-#TeamFilter input {
+#SelectionFilter input {
     margin: 0 0.4em 0 0;
     vertical-align: -0.1em;
     cursor: inherit;
-}
-
-#TeamSearch_footer {
-    position: absolute;
-    left: 10px;
-    right: 10px;
-    bottom: 10px;
-    height: 2.5em;
-    line-height: 2.5em;
-    text-align: right;
-}
-
-#TeamSearch_footer button {
-    height: 2em;
-    margin-left: 0.5em;
-    border: 0;
-    padding: 0 0.75em;
-    border-radius: 0.5em;
-    font: inherit;
-    background-color: #DDDDDD;
-    cursor: pointer;
-}
-
-#TeamSearch_footer button:disabled {
-    opacity: 0.5;
-    cursor: default;
-}
-
-#TeamSearch_count {
-    float: left;
-    color: #666666;
 }
 
 #Scoreboard_body tr.user.filtered_out {
@@ -378,10 +347,10 @@ abbr {
     top:         calc(20px - 0.5em);
     left: 10px;
     right: 10px;
-    bottom: 44px; /* 50px - 0.5em at a 12px font-size, leaving room for the footer */
-    bottom: -webkit-calc(50px - 0.5em);
-    bottom:    -moz-calc(50px - 0.5em);
-    bottom:         calc(50px - 0.5em);
+    bottom: 14px; /* 20px - 0.5em at a 12px font-size */
+    bottom: -webkit-calc(20px - 0.5em);
+    bottom:    -moz-calc(20px - 0.5em);
+    bottom:         calc(20px - 0.5em);
     overflow-y: auto;
 }
 

@@ -96,6 +96,12 @@ export default new function () {
             DataStore.toggle_selected($(this).parent().data("user"));
         });
 
+        $("#SelectionFilter_checkbox").click(function () {
+            self.set_filtering($(this).prop("checked"));
+        });
+
+        self.update_filter_ui();
+
         // Create callbacks for UserPanel
         self.tbody_el.on("click", "td.f_name, td.l_name, td.user_id", function () {
             UserDetail.show($(this).parent().data("user"));
@@ -235,20 +241,46 @@ export default new function () {
     };
 
 
-    // The set of team keys the scoreboard is restricted to, or null when all
-    // users are shown
-    self.team_filter = null;
+    // Whether the scoreboard only shows the selected users
+    self.filtering = false;
 
     self.is_filtered_out = function (user) {
-        return self.team_filter !== null && !self.team_filter.has(user["team"]);
+        return self.filtering && !(user["selected"] > 0);
     };
 
-    self.set_team_filter = function (teams) {
-        self.team_filter = teams;
+    self.set_filtering = function (flag) {
+        self.filtering = flag;
 
         for (const user of self.user_list) {
             $(user["row"]).toggleClass("filtered_out", self.is_filtered_out(user));
         }
+
+        self.update_filter_ui();
+    };
+
+    self.selected_count = function () {
+        var count = 0;
+
+        for (const user of self.user_list) {
+            if (user["selected"] > 0) {
+                count += 1;
+            }
+        }
+
+        return count;
+    };
+
+    self.update_filter_ui = function () {
+        var count = self.selected_count();
+
+        // Filtering when nothing is selected would show an empty scoreboard
+        $("#SelectionFilter")
+            .toggleClass("disabled", count == 0)
+            .attr("title", count == 0 ? "Select contestants first" : null);
+        $("#SelectionFilter_checkbox")
+            .prop("checked", self.filtering)
+            .prop("disabled", count == 0);
+        $("#SelectionFilter_count").text(count > 0 ? count : "");
     };
 
 
@@ -536,6 +568,14 @@ export default new function () {
             $row.addClass("selected color" + color);
         } else {
             $row.removeClass("selected color1 color2 color3 color4 color5 color6 color7 color8");
+        }
+
+        if (self.filtering) {
+            // Deselecting the last user turns the filter off, as an empty
+            // scoreboard would leave no way to select anyone again
+            self.set_filtering(self.selected_count() > 0);
+        } else {
+            self.update_filter_ui();
         }
     };
 
