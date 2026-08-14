@@ -267,6 +267,69 @@ abbr {
     outline: 0;
 }
 
+#TeamFilter_button {
+    position: absolute;
+    -moz-box-sizing: content-box;
+    box-sizing: content-box;
+    top: 0;
+    left: 420px;
+    height: 2em;
+    margin: 0.5em;
+    border: 0;
+    padding: 0 0.75em;
+    z-index: 401;
+    border-radius: 0.5em;
+    font: inherit;
+    background-color: #FFFFFF;
+    cursor: pointer;
+    outline: 0;
+}
+
+#TeamFilter_button.active {
+    background-color: #00A3DA;
+    color: white;
+}
+
+#TeamSearch_footer {
+    position: absolute;
+    left: 10px;
+    right: 10px;
+    bottom: 10px;
+    height: 2.5em;
+    line-height: 2.5em;
+    text-align: right;
+}
+
+#TeamSearch_footer button {
+    height: 2em;
+    margin-left: 0.5em;
+    border: 0;
+    padding: 0 0.75em;
+    border-radius: 0.5em;
+    font: inherit;
+    background-color: #DDDDDD;
+    cursor: pointer;
+}
+
+#TeamSearch_footer button:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+#TeamSearch_footer button#TeamSearch_apply {
+    background-color: #00A3DA;
+    color: white;
+}
+
+#TeamSearch_count {
+    float: left;
+    color: #666666;
+}
+
+#Scoreboard_body tr.user.filtered_out {
+    display: none;
+}
+
 #TeamSearch_bg {
     display: none;
     position: absolute;
@@ -314,10 +377,10 @@ abbr {
     top:         calc(20px - 0.5em);
     left: 10px;
     right: 10px;
-    bottom: 14px; /* 20px - 0.5em at a 12px font-size */
-    bottom: -webkit-calc(20px - 0.5em);
-    bottom:    -moz-calc(20px - 0.5em);
-    bottom:         calc(20px - 0.5em);
+    bottom: 44px; /* 50px - 0.5em at a 12px font-size, leaving room for the footer */
+    bottom: -webkit-calc(50px - 0.5em);
+    bottom:    -moz-calc(50px - 0.5em);
+    bottom:         calc(50px - 0.5em);
     overflow-y: auto;
 }
 

@@ -235,10 +235,27 @@ export default new function () {
     };
 
 
+    // The set of team keys the scoreboard is restricted to, or null when all
+    // users are shown
+    self.team_filter = null;
+
+    self.is_filtered_out = function (user) {
+        return self.team_filter !== null && !self.team_filter.has(user["team"]);
+    };
+
+    self.set_team_filter = function (teams) {
+        self.team_filter = teams;
+
+        for (const user of self.user_list) {
+            $(user["row"]).toggleClass("filtered_out", self.is_filtered_out(user));
+        }
+    };
+
+
     self.make_row = function (user) {
         // See the comment in .make_cols() for the reason we use colspans.
         var result = " \
-<tr class=\"user" + (user["selected"] > 0 ? " selected color" + user["selected"] : "") + "\" data-user=\"" + user["key"] + "\"> \
+<tr class=\"user" + (user["selected"] > 0 ? " selected color" + user["selected"] : "") + (self.is_filtered_out(user) ? " filtered_out" : "") + "\" data-user=\"" + user["key"] + "\"> \
     <td class=\"sel\"></td> \
     <td class=\"rank medal-" + Config.get_medal(user["rank"]) + "\">" + self.format_rank(user) + "</td> \
     <td colspan=\"10\" class=\"f_name\">" + escapeHTML(user["f_name"]) + "</td> \
