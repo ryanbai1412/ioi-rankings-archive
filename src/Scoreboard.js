@@ -914,13 +914,28 @@ export default new function () {
         var entry = user["delta_entry"];
         var active = entry !== undefined && entry["anim"].playState === "running";
 
-        // While a badge is showing, fold further movement into it in place
-        // rather than restarting it (rapid rank changes would otherwise
-        // flash constantly)
+        // Movement against the badge's displayed direction starts a fresh
+        // badge instead of netting out (a +10 bounce during a slide must
+        // read +10, not shrink the visible minus), and also resets the
+        // drop-batching window (see Timeline)
+        if (active) {
+            var shown = user["delta_from"] - user["delta_last"];
+            var fresh = old_rank - new_rank;
+            if (fresh != 0 && (fresh > 0) != (shown > 0)) {
+                entry["anim"].cancel();
+                active = false;
+                user["drop_start"] = undefined;
+            }
+        }
+
+        // While a badge is showing, fold further movement in its own
+        // direction into it in place rather than restarting it (rapid rank
+        // changes would otherwise flash constantly)
         var from = active ? user["delta_from"] : old_rank;
         if (!active) {
             user["delta_from"] = from;
         }
+        user["delta_last"] = new_rank;
         var delta = from - new_rank;
 
         if (delta == 0) {
