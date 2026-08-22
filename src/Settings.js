@@ -131,7 +131,7 @@ export default new function () {
     };
 
     // Pretend to be a mobile device, to preview the mobile-only behavior
-    // (animation defaults off, the smoothness warning) from the console
+    // (the smoothness warning) from the console
     self.set_force_mobile = function (flag) {
         self.force_mobile = flag;
         // Un-toggled settings follow the device default, which just moved

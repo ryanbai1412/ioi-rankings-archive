@@ -13,21 +13,7 @@
 import $ from "jquery";
 import Config from "./Config.js";
 import DataStore from "./DataStore.js";
-import Scoreboard from "./Scoreboard.js";
-
-var escape_map = {
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    "\"": "&quot;",
-    "'": "&#x27;"
-};
-
-function escape_html(str) {
-    return String(str).replace(/[&<>"']/g, function (ch) {
-        return escape_map[ch];
-    });
-}
+import Scoreboard, {escapeHTML as escape_html} from "./Scoreboard.js";
 
 // For this long after locking on, unexpected scrolls are corrected rather
 // than breaking the lock (leftover trackpad momentum from a manual scroll
@@ -287,6 +273,14 @@ export default new function () {
     ////// Following
 
     self.set_user = function (u_id) {
+        // Re-picking the contestant already followed just re-engages the
+        // lock: going through the full path below would deselect and
+        // reselect them, cycling their highlight color
+        if (u_id !== null && u_id === self.user_id) {
+            self.set_locked(true);
+            return;
+        }
+
         // Move the highlight from the old followed user to the new one, but
         // don't clear a highlight the user had set themselves before following
         if (self.user_id !== null && DataStore.users[self.user_id] &&

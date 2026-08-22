@@ -21,23 +21,21 @@ import DataStore, {round_to_str} from "./DataStore.js";
 import Settings from "./Settings.js";
 import UserDetail from "./UserDetail.js";
 
-var escapeHTML = (function() {
-    var escapeMap = {
-        '&' : '&amp;',
-        '<' : '&lt;',
-        '>' : '&gt;',
-        '"' : '&quot;',
-        "'" : '&#x27;',
-        '/' : '&#x2F;',
-        '`' : '&#x60;'
-    };
-    var escapeHTML = function(str) {
-        return String(str).replace(/[&<>"'\/`]/g, function(ch) {
-            return escapeMap[ch];
-        });
-    };
-    return escapeHTML;
-})();
+var escapeMap = {
+    '&' : '&amp;',
+    '<' : '&lt;',
+    '>' : '&gt;',
+    '"' : '&quot;',
+    "'" : '&#x27;',
+    '/' : '&#x2F;',
+    '`' : '&#x60;'
+};
+
+export function escapeHTML(str) {
+    return String(str).replace(/[&<>"'\/`]/g, function(ch) {
+        return escapeMap[ch];
+    });
+}
 
 export default new function () {
     var self = this;
@@ -446,16 +444,21 @@ export default new function () {
     };
 
 
+    // The users the scoreboard currently shows, in user_list order
+    self.visible_users = function () {
+        if (!self.filtering) {
+            return self.user_list;
+        }
+        return self.user_list.filter(u => !self.is_filtered_out(u));
+    };
+
     // Local ranks (as displayed under the current sorting and filtering) for
     // all users at once, keyed by user id. The timeline snapshots this
     // before and after a playback batch to compute rank deltas.
     self.get_local_ranks = function () {
         const sort_key = self.sort_key;
-        const list = self.filtering
-            ? self.user_list.filter(u => !self.is_filtered_out(u))
-            : self.user_list;
-
-        const sorted = list.slice().sort((a, b) => b[sort_key] - a[sort_key]);
+        const sorted = self.visible_users().slice()
+            .sort((a, b) => b[sort_key] - a[sort_key]);
 
         var result = new Object();
         var rank = 1;
@@ -471,10 +474,8 @@ export default new function () {
     // Get the rank for the current scoreboard order
     self.get_local_rank = function (user) {
         const sort_key = self.sort_key;
-        const list = self.filtering
-            ? self.user_list.filter(u => !self.is_filtered_out(u))
-            : self.user_list;
-        return list.filter(u => u[sort_key] > user[sort_key]).length + 1;
+        return self.visible_users()
+            .filter(u => u[sort_key] > user[sort_key]).length + 1;
     }
 
     // Get what the rank should look like for the given user. The local rank
@@ -713,9 +714,9 @@ export default new function () {
 
 
     // This callback is called by the DataStore when a user changes rank.
+    // update_rank keeps the cached cell text and medal class coherent.
     self.rank_handler = function (u_id, user) {
-        user["rank_cell_text"] = self.format_rank(user);
-        $(user["row"]).children("td.rank").children(".rank_label").text(user["rank_cell_text"]);
+        self.update_rank(user);
     };
 
 
@@ -761,13 +762,12 @@ export default new function () {
         var frame = $("#InnerFrame")[0];
         var tbody = self.tbody_el[0];
         // With a filter active the hidden rows take up no space, so only
-        // the visible ones count towards the measurements
-        var first_row = self.filtering ?
-            tbody.querySelector("tr:not(.filtered_out)") :
-            tbody.firstElementChild;
-        var row_count = self.filtering ?
-            tbody.querySelectorAll("tr:not(.filtered_out)").length :
-            tbody.childElementCount;
+        // the visible ones count towards the measurements (user_list order
+        // matches the DOM order, so the first visible user's row is the
+        // first visible row)
+        var visible = self.visible_users();
+        var first_row = visible.length > 0 ? visible[0]["row"] : null;
+        var row_count = visible.length;
 
         // The row height must keep its fractional part (offsetHeight rounds
         // to an integer): index * height accumulates the rounding error to

@@ -18,7 +18,7 @@
 import $ from "jquery";
 import stats from "./stats.json";
 
-function round(value, ndigits) {
+export function round(value, ndigits) {
     value *= Math.pow(10, ndigits);
     value = Math.round(value);
     value /= Math.pow(10, ndigits);
@@ -398,35 +398,16 @@ window.DataStore = new function () {
         var user = self.users[u_id];
         var task = self.tasks[t_id];
 
-        var c_id = task["contest"];
-        var contest = self.contests[c_id];
-
-        // Task
         new_t_score = round(new_t_score, task["score_precision"]);
         var old_t_score = user["t_" + t_id];
         user["t_" + t_id] = new_t_score;
 
-        // Contest
-        var new_c_score = 0.0;  // = max(user's score on t for t in contest.tasks)
-        for (var i = 0; i < contest.tasks.length; i += 1) {
-            new_c_score += user["t_" + contest.tasks[i].key];
-        }
-        new_c_score = round(new_c_score, contest["score_precision"]);
-        var old_c_score = user["c_" + c_id];
-        user["c_" + c_id] = new_c_score;
-
-        // Global
-        var new_g_score = 0.0;  // = max(user's score on c for c in self.contest_list)
-        for (var i = 0; i < self.contest_list.length; i += 1) {
-            new_g_score += user["c_" + self.contest_list[i].key];
-        }
-        new_g_score = round(new_g_score, self.global_score_precision);
         var old_g_score = user["global"];
-        user["global"] = new_g_score;
+        self.recompute_scores(u_id);
 
         console.info("Changed score for user " + u_id + " and task " + t_id + ": " + old_t_score + " -> " + new_t_score);
 
-        self.score_events.fire(u_id, user, t_id, task, new_g_score - old_g_score);
+        self.score_events.fire(u_id, user, t_id, task, user["global"] - old_g_score);
     };
 
     // Recompute the contest and global scores of a user from its task scores

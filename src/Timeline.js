@@ -5,7 +5,7 @@
  */
 
 import $ from "jquery";
-import DataStore from "./DataStore.js";
+import DataStore, {round} from "./DataStore.js";
 import Debug from "./Debug.js";
 import Follow from "./Follow.js";
 import HistoryStore from "./HistoryStore.js";
@@ -49,11 +49,6 @@ const SLOW_FRAME_LIMIT = 10;
 // badge stays up (updating in place) while the slide continues, and once
 // it has faded out the next drop starts a fresh chunk.
 const DROP_WINDOW_MS = 4000;
-
-function round(value, ndigits) {
-    var factor = Math.pow(10, ndigits);
-    return Math.round(value * factor) / factor;
-}
 
 export default new function () {
     var self = this;
@@ -115,8 +110,12 @@ export default new function () {
             }
 
             self.scrubbing = true;
-            // The drag keeps this measurement for its whole run
+            // The drag keeps these measurements for its whole run: the
+            // scoreboard geometry, and the track's own rectangle (reading
+            // it on every move would force a layout after each tick's
+            // DOM writes)
             Scoreboard.geometry = undefined;
+            self.scrub_rect = self.slider_el[0].getBoundingClientRect();
             self.last_scrub_apply = 0;
             self.scrub_to(event.clientX, false);
         });
@@ -127,12 +126,20 @@ export default new function () {
             }
         });
 
-        var end_scrub = function (event) {
+        var end_scrub = function (event, cancelled) {
             if (!self.scrubbing || !event.isPrimary) {
                 return;
             }
             self.scrubbing = false;
-            self.scrub_to(event.clientX, true);
+
+            if (cancelled) {
+                // A cancelled pointer carries no useful coordinates: settle
+                // where the last move left us, applying any update the
+                // scrub throttling deferred
+                self.set_position(self.position);
+            } else {
+                self.scrub_to(event.clientX, true);
+            }
 
             if (self.resume_after_scrub) {
                 self.resume_after_scrub = false;
@@ -149,8 +156,12 @@ export default new function () {
             }
         };
 
-        track.addEventListener("pointerup", end_scrub);
-        track.addEventListener("pointercancel", end_scrub);
+        track.addEventListener("pointerup", function (event) {
+            end_scrub(event, false);
+        });
+        track.addEventListener("pointercancel", function (event) {
+            end_scrub(event, true);
+        });
 
         $("#Timeline_ticks").on("click", ".Timeline_tick", function () {
             self.set_position(parseFloat($(this).attr("data-position")));
@@ -182,14 +193,28 @@ export default new function () {
         // The slider must not stay disabled: mobile Safari dims disabled
         // controls (fading the fill color), overriding the custom styling.
         // It remains inert to pointers (the track does the scrubbing), but
-        // becomes focusable, and the keydown handler below owns its keys.
+        // becomes focusable: the keydown handler below overrides its arrow
+        // keys, and any key it handles natively (Home, End, Page Up/Down)
+        // moves the timeline through this input listener, so the thumb can
+        // never drift out of sync with the actual position.
         self.slider_el.prop("disabled", false);
+        self.slider_el.on("input", function () {
+            self.set_position(parseInt(this.value, 10) / SLIDER_STEPS);
+        });
 
         $(document).on("keydown", function (event) {
             // Leave typing alone (e.g. the team search box); the slider is
             // ours though, and we override its native tiny arrow steps
             if (event.target !== self.slider_el[0] &&
                 $(event.target).is("input, textarea, select, [contenteditable]")) {
+                return;
+            }
+
+            // A focused button keeps its native Space/Enter activation
+            // (e.g. Space on the follow dropdown's toggle must open it,
+            // not start playback)
+            if ($(event.target).is("button") &&
+                (event.key === " " || event.key === "Enter")) {
                 return;
             }
 
@@ -279,14 +304,55 @@ export default new function () {
         self.applied = self.events.length;
     };
 
-    // Set the scoreboard to the state it had at the given (absolute) time
-    self.apply_time = function (time) {
-        var start = performance.now();
+    // Walk the event pointer to the given (absolute) time, poking the
+    // crossed events' scores into the user objects. Returns the affected
+    // users in "dirty" (keyed by user id) and, when track_scores is set,
+    // the first and last score seen per changed cell (keyed "user/task"),
+    // so that a batch of crossed events nets out for the flash effects.
+    self.cross_events = function (time, track_scores) {
         var dirty = new Object();
-        // First and last score seen per changed cell (keyed "user/task"),
-        // so a batch of crossed events nets out for the flash effects
         var first_score = new Object();
         var last_score = new Object();
+
+        while (self.applied < self.events.length &&
+               self.events[self.applied]["time"] <= time) {
+            var event = self.events[self.applied];
+            event["user_obj"][event["t_key"]] = event["score"];
+            dirty[event["user"]] = true;
+            if (track_scores) {
+                if (!(event["key"] in first_score)) {
+                    first_score[event["key"]] = event["prev_score"];
+                }
+                last_score[event["key"]] = event["score"];
+            }
+            self.applied += 1;
+        }
+
+        while (self.applied > 0 && self.events[self.applied - 1]["time"] > time) {
+            self.applied -= 1;
+            var event = self.events[self.applied];
+            event["user_obj"][event["t_key"]] = event["prev_score"];
+            dirty[event["user"]] = true;
+            if (track_scores) {
+                if (!(event["key"] in first_score)) {
+                    first_score[event["key"]] = event["score"];
+                }
+                last_score[event["key"]] = event["prev_score"];
+            }
+        }
+
+        return {"dirty": dirty,
+                "first_score": first_score,
+                "last_score": last_score};
+    };
+
+    // Set the scoreboard to the state it had at the given (absolute) time.
+    //
+    // The DOM reads and writes in here are carefully ordered to avoid
+    // forced reflows (see the individual comments): all the reads happen
+    // against a clean layout or the cached geometry, then the writes go in.
+    self.apply_time = function (time) {
+        var start = performance.now();
 
         // The cached geometry goes stale as the page settles (rows grow when
         // fonts and images come in), so take fresh measurements on discrete
@@ -317,32 +383,8 @@ export default new function () {
         // active column rather than always the global standings
         var old_ranks = deltas || drops ? Scoreboard.get_local_ranks() : null;
 
-        while (self.applied < self.events.length &&
-               self.events[self.applied]["time"] <= time) {
-            var event = self.events[self.applied];
-            event["user_obj"][event["t_key"]] = event["score"];
-            dirty[event["user"]] = true;
-            if (effects) {
-                if (!(event["key"] in first_score)) {
-                    first_score[event["key"]] = event["prev_score"];
-                }
-                last_score[event["key"]] = event["score"];
-            }
-            self.applied += 1;
-        }
-
-        while (self.applied > 0 && self.events[self.applied - 1]["time"] > time) {
-            self.applied -= 1;
-            var event = self.events[self.applied];
-            event["user_obj"][event["t_key"]] = event["prev_score"];
-            dirty[event["user"]] = true;
-            if (effects) {
-                if (!(event["key"] in first_score)) {
-                    first_score[event["key"]] = event["score"];
-                }
-                last_score[event["key"]] = event["prev_score"];
-            }
-        }
+        var crossed = self.cross_events(time, effects);
+        var dirty = crossed["dirty"];
 
         if ($.isEmptyObject(dirty)) {
             return;
@@ -378,82 +420,27 @@ export default new function () {
         }
 
         if (flashes) {
-            for (var key in last_score) {
-                var sep = key.indexOf("/");
-                var user = DataStore.users[key.slice(0, sep)];
-                var delta = last_score[key] - first_score[key];
-                if (delta != 0 && Scoreboard.is_row_visible(user, range)) {
-                    Scoreboard.flash_cell(user, key.slice(sep + 1), delta);
-                }
-            }
+            self.show_flashes(crossed["first_score"], crossed["last_score"],
+                              range);
         }
 
         if (deltas || drops) {
             var new_ranks = Scoreboard.get_local_ranks();
-
             if (deltas) {
-                for (var u_id in dirty) {
-                    var user = DataStore.users[u_id];
-                    if (old_ranks[u_id] !== undefined && new_ranks[u_id] !== undefined &&
-                        old_ranks[u_id] != new_ranks[u_id] &&
-                        Scoreboard.is_row_visible(user, range)) {
-                        Scoreboard.show_rank_delta(user, old_ranks[u_id], new_ranks[u_id]);
-                    }
-                }
+                self.show_delta_badges(dirty, old_ranks, new_ranks, range);
             }
-
-            // Rows that fell only because others scored. One submission
-            // elsewhere pushes many rows down by one, and a busy stretch
-            // does so on every tick, so these are batched: the drop is
-            // counted from the rank held at the start of a short window
-            // (reset by the user's own score changes), giving one folded
-            // badge instead of a stream of tiny ones.
             if (drops) {
-                var now = performance.now();
-                for (var u_id in new_ranks) {
-                    if (dirty[u_id] !== undefined ||
-                        old_ranks[u_id] === undefined ||
-                        new_ranks[u_id] <= old_ranks[u_id]) {
-                        continue;
-                    }
-                    var user = DataStore.users[u_id];
-                    if (!Scoreboard.is_row_visible(user, range)) {
-                        continue;
-                    }
-                    if (user["drop_start"] === undefined ||
-                        now - user["drop_start"] > DROP_WINDOW_MS) {
-                        user["drop_start"] = now;
-                        user["drop_from"] = old_ranks[u_id];
-                        // A fresh window is a fresh chunk: a badge still
-                        // fading from before (the previous window's drop,
-                        // or a climb) must not fold this chunk into its
-                        // old base
-                        Scoreboard.end_rank_delta(user);
-                    }
-                    if (new_ranks[u_id] > user["drop_from"]) {
-                        Scoreboard.show_rank_delta(user, user["drop_from"],
-                                                   new_ranks[u_id],
-                                                   DROP_WINDOW_MS);
-                    }
-                }
-                // A row's own score change ends its batching window
-                for (var u_id in dirty) {
-                    DataStore.users[u_id]["drop_start"] = undefined;
-                }
+                self.show_drop_badges(dirty, old_ranks, new_ranks, range);
             }
         }
 
         if (Debug.enabled) {
-            var dirty_count = 0;
-            for (var u_id in dirty) {
-                dirty_count += 1;
-            }
             Debug.report_apply({
                 "elapsed": performance.now() - start,
                 "interval": self.apply_interval,
                 "applied": self.applied,
                 "total": self.events.length,
-                "dirty": dirty_count
+                "dirty": Object.keys(dirty).length
             });
         }
 
@@ -481,6 +468,71 @@ export default new function () {
         }
     };
 
+    // Flash the visible cells whose score changed, green or red for the
+    // batch's net direction
+    self.show_flashes = function (first_score, last_score, range) {
+        for (var key in last_score) {
+            var sep = key.indexOf("/");
+            var user = DataStore.users[key.slice(0, sep)];
+            var delta = last_score[key] - first_score[key];
+            if (delta != 0 && Scoreboard.is_row_visible(user, range)) {
+                Scoreboard.flash_cell(user, key.slice(sep + 1), delta);
+            }
+        }
+    };
+
+    // Rank badges on the visible rows whose own score changes moved them
+    self.show_delta_badges = function (dirty, old_ranks, new_ranks, range) {
+        for (var u_id in dirty) {
+            var user = DataStore.users[u_id];
+            if (old_ranks[u_id] !== undefined && new_ranks[u_id] !== undefined &&
+                old_ranks[u_id] != new_ranks[u_id] &&
+                Scoreboard.is_row_visible(user, range)) {
+                Scoreboard.show_rank_delta(user, old_ranks[u_id], new_ranks[u_id]);
+            }
+        }
+    };
+
+    // Badges on rows that fell only because others scored. One submission
+    // elsewhere pushes many rows down by one, and a busy stretch does so
+    // on every tick, so these are batched: the drop is counted from the
+    // rank held at the start of a short window (reset by the user's own
+    // score changes), giving one folded badge instead of a stream of tiny
+    // ones.
+    self.show_drop_badges = function (dirty, old_ranks, new_ranks, range) {
+        var now = performance.now();
+
+        for (var u_id in new_ranks) {
+            if (dirty[u_id] !== undefined ||
+                old_ranks[u_id] === undefined ||
+                new_ranks[u_id] <= old_ranks[u_id]) {
+                continue;
+            }
+            var user = DataStore.users[u_id];
+            if (!Scoreboard.is_row_visible(user, range)) {
+                continue;
+            }
+            if (user["drop_start"] === undefined ||
+                now - user["drop_start"] > DROP_WINDOW_MS) {
+                user["drop_start"] = now;
+                user["drop_from"] = old_ranks[u_id];
+                // A fresh window is a fresh chunk: a badge still fading
+                // from before (the previous window's drop, or a climb)
+                // must not fold this chunk into its old base
+                Scoreboard.end_rank_delta(user);
+            }
+            if (new_ranks[u_id] > user["drop_from"]) {
+                Scoreboard.show_rank_delta(user, user["drop_from"],
+                                           new_ranks[u_id], DROP_WINDOW_MS);
+            }
+        }
+
+        // A row's own score change ends its batching window
+        for (var u_id in dirty) {
+            DataStore.users[u_id]["drop_start"] = undefined;
+        }
+    };
+
     self.update_overview = function () {
         self.overview_stale = false;
 
@@ -493,6 +545,31 @@ export default new function () {
 
     ////// Timeline geometry
 
+    /* The timeline position in [0, 1] maps onto the contests by giving each
+       an equal share, so the breaks between contests are skipped. These
+       helpers convert between a position and a (contest index, seconds into
+       the contest) pair; all the other time math is built on them.
+     */
+
+    // How long the given contest runs, in seconds
+    self.duration = function (idx) {
+        return self.contests[idx]["end"] - self.contests[idx]["begin"];
+    };
+
+    // The contest the given position falls in and how far into it it is
+    self.locate = function (position) {
+        var n = self.contests.length;
+        var idx = Math.min(Math.floor(position * n), n - 1);
+        return {
+            "idx": idx,
+            "elapsed": (position * n - idx) * self.duration(idx)
+        };
+    };
+
+    self.position_of = function (idx, elapsed) {
+        return (idx + elapsed / self.duration(idx)) / self.contests.length;
+    };
+
     // The time the given position on the timeline corresponds to. The very end
     // of the timeline is the end of the archive (which may be later than the
     // end of the last contest, if scores were changed afterwards).
@@ -501,11 +578,8 @@ export default new function () {
             return Infinity;
         }
 
-        var n = self.contests.length;
-        var idx = Math.min(Math.floor(position * n), n - 1);
-        var contest = self.contests[idx];
-
-        return contest["begin"] + (position * n - idx) * (contest["end"] - contest["begin"]);
+        var at = self.locate(position);
+        return self.contests[at["idx"]]["begin"] + at["elapsed"];
     };
 
     // The positions one can seek to: the begin of each contest and the end
@@ -541,7 +615,8 @@ export default new function () {
     // drag can emit far more moves than slower devices can keep up with;
     // the final position (finish == true) is always applied.
     self.scrub_to = function (client_x, finish) {
-        var rect = self.slider_el[0].getBoundingClientRect();
+        // Measured once when the drag started (see the pointerdown handler)
+        var rect = self.scrub_rect;
         // The thumb (14px wide) travels over the track minus its own width
         var travel = rect.width - 14;
         if (travel <= 0) {
@@ -689,27 +764,26 @@ export default new function () {
     // Move by the given amount of contest seconds (may be negative)
     self.advance = function (seconds, skip_apply) {
         var n = self.contests.length;
-        var idx = Math.min(Math.floor(self.position * n), n - 1);
-        var elapsed = (self.position * n - idx) *
-            (self.contests[idx]["end"] - self.contests[idx]["begin"]) + seconds;
+        var at = self.locate(self.position);
+        var idx = at["idx"];
+        var elapsed = at["elapsed"] + seconds;
 
-        while (idx < n - 1 && elapsed >= self.contests[idx]["end"] - self.contests[idx]["begin"]) {
-            elapsed -= self.contests[idx]["end"] - self.contests[idx]["begin"];
+        // Carry the overflow into the neighboring contests, skipping the
+        // breaks in between
+        while (idx < n - 1 && elapsed >= self.duration(idx)) {
+            elapsed -= self.duration(idx);
             idx += 1;
         }
-
         while (idx > 0 && elapsed < 0) {
             idx -= 1;
-            elapsed += self.contests[idx]["end"] - self.contests[idx]["begin"];
+            elapsed += self.duration(idx);
         }
 
-        var duration = self.contests[idx]["end"] - self.contests[idx]["begin"];
-
-        if (idx == n - 1 && elapsed >= duration) {
+        if (idx == n - 1 && elapsed >= self.duration(idx)) {
             self.set_position(1);
             self.pause();
         } else {
-            self.set_position((idx + elapsed / duration) / n, skip_apply);
+            self.set_position(self.position_of(idx, elapsed), skip_apply);
         }
     };
 
@@ -734,11 +808,8 @@ export default new function () {
             return "Final";
         }
 
-        var n = self.contests.length;
-        var idx = Math.min(Math.floor(self.position * n), n - 1);
-        var contest = self.contests[idx];
-        var elapsed = (self.position * n - idx) * (contest["end"] - contest["begin"]);
-
-        return contest["name"] + " " + format_time(Math.floor(elapsed));
+        var at = self.locate(self.position);
+        return self.contests[at["idx"]]["name"] + " " +
+               format_time(Math.floor(at["elapsed"]));
     };
 };
