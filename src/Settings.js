@@ -34,7 +34,7 @@ export default new function () {
     // Whether the one-time auto-disable notice has already been shown
     const NOTICE_KEY = "ranking_effects_notice";
 
-    const ANIMATION_SETTINGS = ["rank_deltas", "score_flashes"];
+    const ANIMATION_SETTINGS = ["rank_deltas", "rank_drops", "score_flashes"];
 
     // Inline SVG gear: Unicode gear glyphs render differently per font, and
     // mobile platforms show them as color emoji

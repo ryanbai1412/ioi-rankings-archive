@@ -41,6 +41,11 @@ const JUMP_STEP = 60 * 60;
 const SLOW_FRAME_MS = 40;
 const SLOW_FRAME_LIMIT = 10;
 
+// Batching window for the passive rank-drop badges: drops are counted from
+// the rank held at the start of the window, so a sustained slide folds
+// into one badge rather than a stream of tiny ones
+const DROP_WINDOW_MS = 20000;
+
 // Inline SVG control icons: Unicode glyphs like U+23EE render differently
 // per font, and mobile platforms show them as color emoji
 const ICONS = {
@@ -293,13 +298,14 @@ export default new function () {
         var readable = !self.playing || SPEEDS[self.speed_idx] <= 4;
         var flashes = readable && Settings.get("score_flashes");
         var deltas = readable && Settings.get("rank_deltas");
-        var effects = flashes || deltas;
+        var drops = readable && Settings.get("rank_drops");
+        var effects = flashes || deltas || drops;
         var slide = !self.playing;
 
         // Ranks in the currently displayed sorting, snapshotted before the
         // events mutate any scores, so the rank-delta badges reflect the
         // active column rather than always the global standings
-        var old_ranks = deltas ? Scoreboard.get_local_ranks() : null;
+        var old_ranks = deltas || drops ? Scoreboard.get_local_ranks() : null;
 
         while (self.applied < self.events.length &&
                self.events[self.applied]["time"] <= time) {
@@ -364,15 +370,51 @@ export default new function () {
             }
         }
 
-        if (deltas) {
+        if (deltas || drops) {
             var new_ranks = Scoreboard.get_local_ranks();
 
-            for (var u_id in dirty) {
-                var user = DataStore.users[u_id];
-                if (old_ranks[u_id] !== undefined && new_ranks[u_id] !== undefined &&
-                    old_ranks[u_id] != new_ranks[u_id] &&
-                    Scoreboard.is_row_visible(user, range)) {
-                    Scoreboard.show_rank_delta(user, old_ranks[u_id], new_ranks[u_id]);
+            if (deltas) {
+                for (var u_id in dirty) {
+                    var user = DataStore.users[u_id];
+                    if (old_ranks[u_id] !== undefined && new_ranks[u_id] !== undefined &&
+                        old_ranks[u_id] != new_ranks[u_id] &&
+                        Scoreboard.is_row_visible(user, range)) {
+                        Scoreboard.show_rank_delta(user, old_ranks[u_id], new_ranks[u_id]);
+                    }
+                }
+            }
+
+            // Rows that fell only because others scored. One submission
+            // elsewhere pushes many rows down by one, and a busy stretch
+            // does so on every tick, so these are batched: the drop is
+            // counted from the rank held at the start of a short window
+            // (reset by the user's own score changes), giving one folded
+            // badge instead of a stream of tiny ones.
+            if (drops) {
+                var now = performance.now();
+                for (var u_id in new_ranks) {
+                    if (dirty[u_id] !== undefined ||
+                        old_ranks[u_id] === undefined ||
+                        new_ranks[u_id] <= old_ranks[u_id]) {
+                        continue;
+                    }
+                    var user = DataStore.users[u_id];
+                    if (!Scoreboard.is_row_visible(user, range)) {
+                        continue;
+                    }
+                    if (user["drop_start"] === undefined ||
+                        now - user["drop_start"] > DROP_WINDOW_MS) {
+                        user["drop_start"] = now;
+                        user["drop_from"] = old_ranks[u_id];
+                    }
+                    if (new_ranks[u_id] > user["drop_from"]) {
+                        Scoreboard.show_rank_delta(user, user["drop_from"],
+                                                   new_ranks[u_id]);
+                    }
+                }
+                // A row's own score change ends its batching window
+                for (var u_id in dirty) {
+                    DataStore.users[u_id]["drop_start"] = undefined;
                 }
             }
         }
