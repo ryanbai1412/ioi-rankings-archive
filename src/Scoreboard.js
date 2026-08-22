@@ -770,11 +770,12 @@ export default new function () {
 
         var frame_rect = frame.getBoundingClientRect();
         // Where the badge gutter sits on screen, for the overlay badges: to
-        // the left of the rank cell of whatever row is at the top
-        var rank_cell = first_row !== null ?
-                        first_row.querySelector("td.rank") : null;
-        var rank_rect = rank_cell !== null ?
-                        rank_cell.getBoundingClientRect() : {"left": 0};
+        // the left of the selection-checkbox column of whatever row is at
+        // the top
+        var sel_cell = first_row !== null ?
+                       first_row.querySelector("td.sel") : null;
+        var sel_rect = sel_cell !== null ?
+                       sel_cell.getBoundingClientRect() : {"left": 0};
 
         self.geometry = {
             "table_top": $("#Scoreboard")[0].offsetTop,
@@ -784,7 +785,7 @@ export default new function () {
             "frame_height": frame.clientHeight,
             "frame_top": frame_rect.top,
             "frame_bottom": frame_rect.bottom,
-            "gutter_right": rank_rect.left - 5
+            "gutter_right": sel_rect.left - 5
         };
     };
 
