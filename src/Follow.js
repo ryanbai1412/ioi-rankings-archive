@@ -29,6 +29,11 @@ function escape_html(str) {
     });
 }
 
+// For this long after locking on, unexpected scrolls are corrected rather
+// than breaking the lock (leftover trackpad momentum from a manual scroll
+// keeps producing events well past the click that locked)
+const LOCK_GRACE_MS = 500;
+
 export default new function () {
     var self = this;
 
@@ -37,6 +42,8 @@ export default new function () {
     self.was_selected = false;
     self.locked = false;
     self.menu_open = false;
+    // When the lock last engaged (see the scroll handler's grace period)
+    self.lock_time = 0;
 
     // All options, sorted; each is {key, label, search, el}
     self.options = new Array();
@@ -129,7 +136,10 @@ export default new function () {
             }
         });
 
-        // Any scroll that isn't one we asked for breaks the lock
+        // Any scroll that isn't one we asked for breaks the lock — except
+        // right after locking on, when stray events may still be arriving
+        // from before the click (trackpad momentum keeps scrolling for a
+        // while); those get corrected instead of cancelling the fresh lock
         self.expected_scroll = null;
         self.frame_el.on("scroll", function () {
             if (!self.locked) {
@@ -137,6 +147,10 @@ export default new function () {
             }
             if (self.expected_scroll !== null &&
                 Math.abs(self.frame_el.scrollTop() - self.expected_scroll) <= 1) {
+                return;
+            }
+            if (performance.now() - self.lock_time < LOCK_GRACE_MS) {
+                self.recenter();
                 return;
             }
             self.set_locked(false);
@@ -281,6 +295,7 @@ export default new function () {
             self.was_selected = DataStore.get_selected(u_id) != 0;
             DataStore.set_selected(u_id, true);
             self.locked = true;
+            self.lock_time = performance.now();
             self.recenter();
         } else {
             self.locked = false;
@@ -292,6 +307,7 @@ export default new function () {
     self.set_locked = function (flag) {
         self.locked = flag && self.user_id !== null;
         if (self.locked) {
+            self.lock_time = performance.now();
             self.recenter();
         }
         self.update_ui();
@@ -322,14 +338,17 @@ export default new function () {
             geometry["table_top"] + Scoreboard.row_offset(user) +
             (geometry["row_height"] - geometry["frame_height"]) / 2);
 
-        if (target === self.expected_scroll) {
-            return;
+        // Compare against where the frame actually is, not against the last
+        // position we asked for: after a manual scroll broke the lock, the
+        // remembered position may still equal the target, and relying on it
+        // would turn re-locking into a no-op
+        var frame = self.frame_el[0];
+        if (frame.scrollTop !== target) {
+            frame.scrollTop = target;
         }
-
-        self.frame_el.scrollTop(target);
-        // Read back the actual value (the browser clamps it) so that the
-        // scroll handler can tell our scrolls from the user's
-        self.expected_scroll = self.frame_el.scrollTop();
+        // The browser clamps the value, so read back what actually holds,
+        // letting the scroll handler tell our scrolls from the user's
+        self.expected_scroll = frame.scrollTop;
     };
 
     self.update_ui = function () {
