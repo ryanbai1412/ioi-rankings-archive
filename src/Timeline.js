@@ -6,6 +6,7 @@
 
 import $ from "jquery";
 import DataStore from "./DataStore.js";
+import Debug from "./Debug.js";
 import Follow from "./Follow.js";
 import HistoryStore from "./HistoryStore.js";
 import Overview from "./Overview.js";
@@ -178,6 +179,11 @@ export default new function () {
         // (identical geometry, everything disabled)
         $("#Timeline").removeClass("loading");
         $("#Timeline_controls button").prop("disabled", false);
+        // The slider must not stay disabled: mobile Safari dims disabled
+        // controls (fading the fill color), overriding the custom styling.
+        // It remains inert to pointers (the track does the scrubbing), but
+        // becomes focusable, and the keydown handler below owns its keys.
+        self.slider_el.prop("disabled", false);
 
         $(document).on("keydown", function (event) {
             // Leave typing alone (e.g. the team search box); the slider is
@@ -435,6 +441,20 @@ export default new function () {
                     DataStore.users[u_id]["drop_start"] = undefined;
                 }
             }
+        }
+
+        if (Debug.enabled) {
+            var dirty_count = 0;
+            for (var u_id in dirty) {
+                dirty_count += 1;
+            }
+            Debug.report_apply({
+                "elapsed": performance.now() - start,
+                "interval": self.apply_interval,
+                "applied": self.applied,
+                "total": self.events.length,
+                "dirty": dirty_count
+            });
         }
 
         // Slow updates while animations run on their default-on state make

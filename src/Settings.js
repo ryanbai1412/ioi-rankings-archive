@@ -21,10 +21,10 @@ import $ from "jquery";
 //
 // Each setting is tri-state: "on" / "off" when the user explicitly toggled
 // it (sticky, stored in localStorage) or unset, in which case a per-device
-// default applies. The replay animations default to off unless the device
-// looks fast (fine pointer, not mobile), and if replay frames turn out slow
-// while the user never touched the toggles, the default flips itself to off
-// (also remembered), so the explicit choice always wins over the heuristics.
+// default applies. The replay animations default to on; if replay frames
+// turn out slow while the user never touched the toggles, the default flips
+// itself to off (also remembered), so the explicit choice always wins over
+// the heuristic.
 export default new function () {
     var self = this;
 
@@ -144,10 +144,12 @@ export default new function () {
 
     self.default_value = function (name) {
         if (ANIMATION_SETTINGS.indexOf(name) !== -1) {
-            // Off unless the device gives a signal it can afford them: not
-            // mobile, and no record of slow replay frames on this device
-            return !self.is_mobile() &&
-                   self.load(VERDICT_KEY) !== "slow";
+            // On until proven costly: when replay frames run slow on this
+            // device the default flips to off (see report_slow_effects)
+            return self.load(VERDICT_KEY) !== "slow";
+        }
+        if (name === "debug_info") {
+            return false;
         }
         // global_ranks
         return true;

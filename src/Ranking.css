@@ -83,8 +83,9 @@ abbr {
 #InnerFrame {
     position: absolute;
     /* The timeline ends at 3em + 55px; with the 2px top margin below this
-       leaves the same 7px gap as above the timeline */
-    top: calc(3em + 60px);
+       leaves the same 7px gap as above the timeline. The timeline grows by
+       --Debug_height when the debug line is shown (see below). */
+    top: calc(3em + 60px + var(--Debug_height, 0px));
     left: 220px;
     right: 0;
     bottom: 0;
@@ -101,6 +102,13 @@ abbr {
 \******************************************************************************/
 
 
+/* With the debug line enabled the timeline band grows to make room for it
+   (and the scoreboard slides down accordingly, see #InnerFrame): the extra
+   space is bottom padding, so the controls stay centered in their 46px */
+html.debug_info {
+    --Debug_height: 15px;
+}
+
 #Timeline {
     position: absolute;
     /* Centered in the band between the header (whose border ends at
@@ -108,12 +116,12 @@ abbr {
     top: calc(3em + 9px);
     left: 220px;
     right: 0;
-    height: 46px;
+    height: calc(46px + var(--Debug_height, 0px));
     box-sizing: border-box;
     margin: 0 0 0 2px;
     /* Extra right padding matches the scoreboard's scrollbar gutter, so the
        right edges of the two line up (see index.js) */
-    padding: 0 calc(3em + var(--scrollbar-width, 0px)) 0 3em;
+    padding: 0 calc(3em + var(--scrollbar-width, 0px)) var(--Debug_height, 0px) 3em;
     display: flex;
     align-items: center;
     z-index: 9;
@@ -121,6 +129,25 @@ abbr {
     -moz-user-select: none;
     -ms-user-select: none;
     user-select: none;
+}
+
+/* The diagnostics line (the "Show debug info" setting), sitting in the
+   extra bottom padding the timeline gains while it's enabled */
+#Debug {
+    display: none;
+    position: absolute;
+    bottom: 2px;
+    left: 3em;
+    right: calc(3em + var(--scrollbar-width, 0px));
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 10px;
+    line-height: 12px;
+    color: #666666;
+    pointer-events: none;
+}
+
+#Debug.visible {
+    display: block;
 }
 
 /* The whole track band is the scrub target (see Timeline.js), so touches

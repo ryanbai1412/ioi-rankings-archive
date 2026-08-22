@@ -26,6 +26,7 @@ import Scoreboard from "./Scoreboard.js";
 import Timeline from "./Timeline.js";
 import Follow from "./Follow.js";
 import Settings from "./Settings.js";
+import Debug from "./Debug.js";
 
 if (!window.console) {
     window.console = new Object();
@@ -57,6 +58,7 @@ $(document).ready(function() {
     }
 
     Settings.init();
+    Debug.init();
 
     // The data is imported lazily (see the module script in index.html), so
     // the page shell above renders right away and hydrates when it arrives

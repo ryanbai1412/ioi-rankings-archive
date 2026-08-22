@@ -47,7 +47,10 @@
     <body>
         <div id="OuterFrame">
             <div id="LogoPanel">
-                <img src="%LOGO%" alt="Logo" />
+                <!-- Decoration: it must not compete with the data download,
+                     which the browser would otherwise let it do since it's
+                     an in-viewport image -->
+                <img src="%LOGO%" alt="Logo" fetchpriority="low" decoding="async" />
             </div>
             <div id="UpperPanel">
                 <a id="HomeButton_link" href="..">
@@ -89,6 +92,13 @@
                                 <span>Global rank in parentheses</span>
                             </label>
                             <button type="button" class="Settings_info" aria-label="More information" data-info="When the scoreboard is filtered to selected teams or sorted in an alternate order, also show each contestant's rank among all contestants, in parentheses."></button>
+                        </div>
+                        <div class="Settings_row">
+                            <label class="Settings_item">
+                                <input type="checkbox" data-setting="debug_info"/>
+                                <span>Show debug info</span>
+                            </label>
+                            <button type="button" class="Settings_info" aria-label="More information" data-info="Show live frame rate, scoreboard update latency and replay counters below the timeline."></button>
                         </div>
                         <div id="Settings_tooltip"></div>
                     </div>
@@ -135,6 +145,7 @@
                         </div>
                     </div>
                 </div>
+                <div id="Debug"></div>
             </div>
             <div id="InnerFrame">
                 <table id="Scoreboard">

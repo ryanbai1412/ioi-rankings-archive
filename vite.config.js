@@ -85,6 +85,11 @@ function patchHtmlPlugin() {
                                     rel: "modulepreload",
                                     crossorigin: true,
                                     href: `/${chunk.fileName}`,
+                                    // The data is by far the largest download
+                                    // and everything waits on it, so on slow
+                                    // connections it must win the bandwidth
+                                    // over images and the other chunks
+                                    fetchpriority: "high",
                                 },
                                 injectTo: "head",
                             }],
