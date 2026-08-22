@@ -43,8 +43,11 @@ const SLOW_FRAME_LIMIT = 10;
 
 // Batching window for the passive rank-drop badges: drops are counted from
 // the rank held at the start of the window, so a sustained slide folds
-// into one badge rather than a stream of tiny ones
-const DROP_WINDOW_MS = 20000;
+// into one badge rather than a stream of tiny ones. The badge's fade is
+// given this same duration, so a window is exactly one badge's life: the
+// badge stays up (updating in place) while the slide continues, and once
+// it has faded out the next drop starts a fresh chunk.
+const DROP_WINDOW_MS = 4000;
 
 function round(value, ndigits) {
     var factor = Math.pow(10, ndigits);
@@ -346,6 +349,14 @@ export default new function () {
 
         Follow.recenter();
 
+        // The recenter may have scrolled the frame: refresh the viewport
+        // span so the effects below judge visibility against where the view
+        // ended up, or the followed row would miss its own badges whenever
+        // it jumps (the geometry cache makes this a plain scrollTop read)
+        if (effects) {
+            range = Scoreboard.visible_range();
+        }
+
         if (measured !== null) {
             Scoreboard.animate_sort(measured);
         }
@@ -397,10 +408,16 @@ export default new function () {
                         now - user["drop_start"] > DROP_WINDOW_MS) {
                         user["drop_start"] = now;
                         user["drop_from"] = old_ranks[u_id];
+                        // A fresh window is a fresh chunk: a badge still
+                        // fading from before (the previous window's drop,
+                        // or a climb) must not fold this chunk into its
+                        // old base
+                        Scoreboard.end_rank_delta(user);
                     }
                     if (new_ranks[u_id] > user["drop_from"]) {
                         Scoreboard.show_rank_delta(user, user["drop_from"],
-                                                   new_ranks[u_id]);
+                                                   new_ranks[u_id],
+                                                   DROP_WINDOW_MS);
                     }
                 }
                 // A row's own score change ends its batching window

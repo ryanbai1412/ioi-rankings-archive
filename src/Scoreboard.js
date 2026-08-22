@@ -910,7 +910,28 @@ export default new function () {
         }
     };
 
-    self.show_rank_delta = function (user, old_rank, new_rank) {
+    // A badge younger than this cannot be cut short by movement against
+    // it: a jump must stay readable for a moment even if the row slides
+    // right back down (the slide is shown once the badge has aged)
+    const MIN_BADGE_MS = 1000;
+
+    // Cut the user's live badge short, so that the next movement starts a
+    // fresh one counting from scratch (used by the timeline when a passive
+    // drop-batching window rolls over). Respects the minimum age: a young
+    // badge stays up, and further movement folds into it instead.
+    self.end_rank_delta = function (user) {
+        var entry = user["delta_entry"];
+        if (entry !== undefined && entry["anim"].playState === "running" &&
+            entry["anim"].currentTime >= MIN_BADGE_MS) {
+            entry["anim"].cancel();
+        }
+    };
+
+    // The optional duration stretches the fade: active badges use the
+    // default, while the passive-drop badges last as long as their
+    // batching window, so that a sustained slide keeps one badge up
+    // rather than pulsing new ones (see Timeline)
+    self.show_rank_delta = function (user, old_rank, new_rank, duration) {
         var entry = user["delta_entry"];
         var active = entry !== undefined && entry["anim"].playState === "running";
 
@@ -922,6 +943,13 @@ export default new function () {
             var shown = user["delta_from"] - user["delta_last"];
             var fresh = old_rank - new_rank;
             if (fresh != 0 && (fresh > 0) != (shown > 0)) {
+                // A young badge is left up untouched: the jump it shows
+                // must stay readable even if the row moves back right
+                // away (a passive slide isn't lost — its batching window
+                // keeps counting, and a later tick will show it)
+                if (entry["anim"].currentTime < MIN_BADGE_MS) {
+                    return;
+                }
                 entry["anim"].cancel();
                 active = false;
                 user["drop_start"] = undefined;
@@ -956,7 +984,7 @@ export default new function () {
                 {"opacity": 1, "offset": 0.15},
                 {"opacity": 1, "offset": 0.7},
                 {"opacity": 0}
-            ], {"duration": 2000, "easing": "ease-out"});
+            ], {"duration": duration || 2000, "easing": "ease-out"});
             entry["anim"].onfinish = entry["anim"].oncancel = function () {
                 var index = self.overlay_live.indexOf(entry);
                 if (index !== -1) {
