@@ -23,6 +23,10 @@ import TimeView from "./TimeView.js";
 import TeamSearch from "./TeamSearch.js";
 import Overview from "./Overview.js";
 import Scoreboard from "./Scoreboard.js";
+import Timeline from "./Timeline.js";
+import Follow from "./Follow.js";
+import Settings from "./Settings.js";
+import Debug from "./Debug.js";
 
 if (!window.console) {
     window.console = new Object();
@@ -45,14 +49,33 @@ if (!window.console.error) {
 }
 
 $(document).ready(function() {
-    DataStore.init(function() {
-        HistoryStore.init();
-        UserDetail.init();
-        TimeView.init();
-        TeamSearch.init(function() {
-          DataStore.init_selections();
+    // Expose the scrollbar's width so non-scrolling elements (the timeline)
+    // can reserve the same gutter and stay aligned with the scoreboard
+    var frame = document.getElementById("InnerFrame");
+    if (frame) {
+        document.documentElement.style.setProperty(
+            "--scrollbar-width", (frame.offsetWidth - frame.clientWidth) + "px");
+    }
+
+    Settings.init();
+    Debug.init();
+
+    // The data is imported lazily (see the module script in index.html), so
+    // the page shell above renders right away and hydrates when it arrives
+    window.data_promise.then(function () {
+        DataStore.init(function() {
+            HistoryStore.init();
+            UserDetail.init();
+            TimeView.init();
+            TeamSearch.init(function() {
+              DataStore.init_selections();
+            });
+            Overview.init();
+            Scoreboard.init();
+            Timeline.init();
+            Follow.init();
         });
-        Overview.init();
-        Scoreboard.init();
+    }, function () {
+        $("#LoadError").show();
     });
 });

@@ -429,6 +429,25 @@ window.DataStore = new function () {
         self.score_events.fire(u_id, user, t_id, task, new_g_score - old_g_score);
     };
 
+    // Recompute the contest and global scores of a user from its task scores
+    self.recompute_scores = function (u_id) {
+        var user = self.users[u_id];
+
+        var g_score = 0.0;
+        for (var i = 0; i < self.contest_list.length; i += 1) {
+            var contest = self.contest_list[i];
+            var c_score = 0.0;
+            for (var j = 0; j < contest.tasks.length; j += 1) {
+                c_score += user["t_" + contest.tasks[j].key];
+            }
+            c_score = round(c_score, contest["score_precision"]);
+            user["c_" + contest.key] = c_score;
+            g_score += c_score;
+        }
+
+        user["global"] = round(g_score, self.global_score_precision);
+    };
+
     self.get_score_t = function (u_id, t_id) {
         return self.users[u_id]["t_" + t_id];
     };
@@ -444,7 +463,7 @@ window.DataStore = new function () {
 
     ////// Rank
 
-    self.init_ranks = function () {
+    self.recompute_ranks = function () {
         // Make a list of all users
         var list = new Array();
 
@@ -476,6 +495,10 @@ window.DataStore = new function () {
 
             user["rank"] = rank;
         }
+    };
+
+    self.init_ranks = function () {
+        self.recompute_ranks();
 
         self.user_create.add(function (u_id, user) {
             /* We're actually just counting how many users have a non-zero
@@ -581,24 +604,10 @@ window.DataStore = new function () {
 
     self.update_network_status = function (state) {
         self.network_state = state;
-        if (state == 0) {
-            $("#ConnectionStatus_box").attr("data-status", "reconnecting");
-            $("#ConnectionStatus_text").text("You are downloading the archived data from the server...");
-            $("#ConnectionStatus_label").html("Loading");
-        } else if (state == 1) {
-            $("#ConnectionStatus_box").attr("data-status", "connected");
-            $("#ConnectionStatus_text").html("The archived data has been successfully loaded");
-            $("#ConnectionStatus_label").html("Archived");
-        } else if (state == 2) {
-            $("#ConnectionStatus_box").attr("data-status", "init_error");
-            $("#ConnectionStatus_text").html("An error occurred while loading the data. Check your connection and <a onclick=\"window.location.reload();\">reload the page</a>.");
-            $("#ConnectionStatus_label").html("Error");
-        }
+        // States 0 (loading) and 1 (loaded) need no indicator for archived
+        // data; only a load failure is surfaced
+        $("#LoadError").toggle(state == 2);
     };
-
-    $(document).ready(function () {
-        self.update_network_status(0);
-    });
 
 
     ////// Sorted contest list

@@ -35,9 +35,11 @@
             <script src="/lib/explorercanvas.js"></script>
         <![endif]-->
         <script type="module">
-            import data from "./data.json";
-
-            window.data = data;
+            // Loaded lazily so the UI shell can initialize (and render the
+            // greyed-out skeleton) while the data downloads
+            window.data_promise = import("./data.json").then(function (m) {
+                window.data = m.default;
+            });
         </script>
         <script type="module" src="../index.js"></script>
         <title>IOI Rankings</title>
@@ -45,7 +47,10 @@
     <body>
         <div id="OuterFrame">
             <div id="LogoPanel">
-                <img src="%LOGO%" alt="Logo" />
+                <!-- Decoration: it must not compete with the data download,
+                     which the browser would otherwise let it do since it's
+                     an in-viewport image -->
+                <img src="%LOGO%" alt="Logo" fetchpriority="low" decoding="async" />
             </div>
             <div id="UpperPanel">
                 <a id="HomeButton_link" href="..">
@@ -55,10 +60,51 @@
                         </div>
                     </div>
                 </a>
-                <div id="ConnectionStatus_box">
-                    <div id="ConnectionStatus_label">Status</div>
-                    <div id="ConnectionStatus_text"></div>
+                <div id="Settings_box">
+                    <button id="Settings_button" type="button" title="Display settings"><svg viewBox='0 0 24 24' width='16' height='16' fill='currentColor'><path d='M19.14 12.94a7.07 7.07 0 0 0 0-1.88l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.61-.22l-2.39.96a7.03 7.03 0 0 0-1.63-.94l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.5.42l-.36 2.54c-.59.24-1.13.56-1.63.94l-2.39-.96a.5.5 0 0 0-.61.22L2.71 8.84a.5.5 0 0 0 .12.64l2.03 1.58a7.07 7.07 0 0 0 0 1.88l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.13.23.4.32.61.22l2.39-.96c.5.38 1.04.7 1.63.94l.36 2.54a.5.5 0 0 0 .5.42h3.84a.5.5 0 0 0 .5-.42l.36-2.54a7.03 7.03 0 0 0 1.63-.94l2.39.96c.21.1.48.01.61-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58zM12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7z'/></svg></button>
+                    <div id="Settings_panel">
+                        <div id="Settings_title">Display settings</div>
+                        <div class="Settings_row">
+                            <label class="Settings_item">
+                                <input type="checkbox" data-setting="rank_deltas"/>
+                                <span>Rank change badges</span>
+                            </label>
+                            <button type="button" class="Settings_info" aria-label="More information" data-info="Show &#x25B2;/&#x25BC; badges next to contestants whose rank changed while moving through contest time."></button>
+                        </div>
+                        <div class="Settings_row Settings_sub">
+                            <label class="Settings_item">
+                                <input type="checkbox" data-setting="rank_drops"/>
+                                <span>Passive rank drops</span>
+                            </label>
+                            <button type="button" class="Settings_info" aria-label="More information" data-info="Also show &#x25BC; badges for contestants who slide down only because others scored, folded over a short window instead of one badge per position lost."></button>
+                        </div>
+                        <div id="Settings_warning">May reduce replay smoothness on this device.</div>
+                        <div class="Settings_row">
+                            <label class="Settings_item">
+                                <input type="checkbox" data-setting="score_flashes"/>
+                                <span>Score change flashes</span>
+                            </label>
+                            <button type="button" class="Settings_info" aria-label="More information" data-info="Flash task cells green or red as their score changes while moving through contest time."></button>
+                        </div>
+                        <div class="Settings_row">
+                            <label class="Settings_item">
+                                <input type="checkbox" data-setting="global_ranks"/>
+                                <span>Global rank in parentheses</span>
+                            </label>
+                            <button type="button" class="Settings_info" aria-label="More information" data-info="When the scoreboard is filtered to selected teams or sorted in an alternate order, also show each contestant's rank among all contestants, in parentheses."></button>
+                        </div>
+                        <div class="Settings_row">
+                            <label class="Settings_item">
+                                <input type="checkbox" data-setting="debug_info"/>
+                                <span>Show debug info</span>
+                            </label>
+                            <button type="button" class="Settings_info" aria-label="More information" data-info="Show live frame rate, scoreboard update latency and replay counters below the timeline."></button>
+                        </div>
+                        <div id="Settings_tooltip"></div>
+                    </div>
+                    <div id="Settings_notice">Animations were turned off to keep the replay smooth on this device. You can re-enable them here.</div>
                 </div>
+                <div id="LoadError">An error occurred while loading the data. Check your connection and reload the page.</div>
             </div>
             <div id="TimeView">
                 <div id="TimeView_name"></div>
@@ -74,6 +120,32 @@
                 <div style="color: #999; text-align: center; font-size: 12px; padding-top: 5px;">
                     Powered by <a style="color: #00A3DA; text-decoration: none;" href="https://cms-dev.github.io/" target="_blank">CMS</a>
                 </div>
+            </div>
+            <div id="Timeline" class="loading">
+                <div id="Timeline_track" title="Scrub through the contest">
+                    <input id="Timeline_slider" type="range" min="0" max="100000" value="100000" disabled/>
+                    <div id="Timeline_ticks"></div>
+                </div>
+                <div id="Timeline_label">Final</div>
+                <div id="Timeline_controls">
+                    <button id="Timeline_prev" type="button" title="Seek to the previous day" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6h2v12H6z M18 6l-8.5 6 8.5 6z"/></svg></button>
+                    <button id="Timeline_play" type="button" title="Play (Space/K)" disabled><svg class="icon_play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg><svg class="icon_pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h4v14H6z M14 5h4v14h-4z"/></svg></button>
+                    <button id="Timeline_next" type="button" title="Seek to the next day" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l8.5 6L6 18z M16 6h2v12h-2z"/></svg></button>
+                    <button id="Timeline_speed" type="button" title="Playback speed" disabled>1&#xD7;</button>
+                </div>
+                <div id="Follow">
+                    <button id="Follow_eye" type="button" class="disabled" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path class="Follow_eye_body" d="M12 5.5 C6.5 5.5 2.5 10.5 1.3 12 C2.5 13.5 6.5 18.5 12 18.5 C17.5 18.5 21.5 13.5 22.7 12 C21.5 10.5 17.5 5.5 12 5.5 Z"/><circle class="Follow_eye_pupil" cx="12" cy="12" r="3.2"/></svg></button>
+                    <div id="Follow_picker">
+                        <button id="Follow_toggle" type="button" title="Follow a contestant" disabled><span id="Follow_toggle_label">Follow a contestant&#x2026;</span><svg class="Follow_chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+                        <div id="Follow_menu">
+                            <input id="Follow_search" type="text" placeholder="Search by name, ID or team&#x2026;" autocomplete="off" spellcheck="false"/>
+                            <button id="Follow_clear" type="button">&#x2715;&ensp;Stop following</button>
+                            <div id="Follow_list"></div>
+                            <div id="Follow_empty">No contestants match</div>
+                        </div>
+                    </div>
+                </div>
+                <div id="Debug"></div>
             </div>
             <div id="InnerFrame">
                 <table id="Scoreboard">

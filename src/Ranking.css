@@ -82,13 +82,518 @@ abbr {
 
 #InnerFrame {
     position: absolute;
-    top: 3em;
+    /* The timeline ends at 3em + 55px; with the 2px top margin below this
+       leaves the same 7px gap as above the timeline. The timeline grows by
+       --Debug_height when the debug line is shown (see below). */
+    top: calc(3em + 60px + var(--Debug_height, 0px));
     left: 220px;
     right: 0;
     bottom: 0;
     margin: 2px 0 0 2px;
     padding: 0 3em;
     overflow-y: scroll;
+}
+
+
+/******************************************************************************\
+|                                                                              |
+|                                    Timeline                                  |
+|                                    --------                                  |
+\******************************************************************************/
+
+
+/* With the debug line enabled the timeline band grows to make room for it
+   (and the scoreboard slides down accordingly, see #InnerFrame): the extra
+   space is bottom padding, so the controls stay centered in their 46px */
+html.debug_info {
+    --Debug_height: 15px;
+}
+
+#Timeline {
+    position: absolute;
+    /* Centered in the band between the header (whose border ends at
+       3em + 2px) and the scoreboard: 7px of air on both sides */
+    top: calc(3em + 9px);
+    left: 220px;
+    right: 0;
+    height: calc(46px + var(--Debug_height, 0px));
+    box-sizing: border-box;
+    margin: 0 0 0 2px;
+    /* Extra right padding matches the scoreboard's scrollbar gutter, so the
+       right edges of the two line up (see index.js) */
+    padding: 0 calc(3em + var(--scrollbar-width, 0px)) var(--Debug_height, 0px) 3em;
+    display: flex;
+    align-items: center;
+    z-index: 9;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+}
+
+/* The diagnostics line (the "Show debug info" setting), sitting in the
+   extra bottom padding the timeline gains while it's enabled */
+#Debug {
+    display: none;
+    position: absolute;
+    bottom: 2px;
+    left: 3em;
+    right: calc(3em + var(--scrollbar-width, 0px));
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 10px;
+    line-height: 12px;
+    color: #666666;
+    pointer-events: none;
+}
+
+#Debug.visible {
+    display: block;
+}
+
+/* The whole track band is the scrub target (see Timeline.js), so touches
+   must not scroll the page and presses anywhere on it move the thumb */
+#Timeline_track {
+    position: relative;
+    flex: 1 1 auto;
+    height: 100%;
+    touch-action: none;
+    cursor: pointer;
+}
+
+#Timeline_slider {
+    position: absolute;
+    /* Half the slider's height above the middle (nudged up 2px to look
+       optically centered next to the label and the controls) */
+    top: calc(50% - 9px);
+    left: 0;
+    width: 100%;
+    height: 14px;
+    margin: 0;
+    padding: 0;
+    background: transparent;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    /* Purely visual: the track handles the pointer */
+    pointer-events: none;
+    outline: none;
+}
+
+/* WebKit has no progress pseudo-element, so the fill left of the thumb is a
+   gradient whose stop (--Timeline_fill) is kept in sync from Timeline.js */
+#Timeline_slider::-webkit-slider-runnable-track {
+    height: 4px;
+    border-radius: 2px;
+    background: linear-gradient(to right,
+        #1745ff var(--Timeline_fill, 100%),
+        #D2D2D6 var(--Timeline_fill, 100%));
+}
+
+#Timeline_slider::-moz-range-track {
+    height: 4px;
+    border-radius: 2px;
+    background-color: #D2D2D6;
+}
+
+#Timeline_slider::-moz-range-progress {
+    height: 4px;
+    border-radius: 2px;
+    background-color: #1745ff;
+}
+
+#Timeline_slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    margin-top: -5px;
+    border: 0;
+    border-radius: 50%;
+    background-color: #1745ff;
+    box-shadow: 0 0 2px 0 gray;
+}
+
+#Timeline_slider::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border: 0;
+    border-radius: 50%;
+    background-color: #1745ff;
+    box-shadow: 0 0 2px 0 gray;
+}
+
+#Timeline_ticks {
+    position: absolute;
+    /* Aligned with the slider */
+    top: calc(50% - 9px);
+    /* The thumb is 14px wide, so the track the ticks refer to is inset by 7px */
+    left: 7px;
+    right: 7px;
+}
+
+.Timeline_tick {
+    position: absolute;
+    top: 0;
+    cursor: pointer;
+}
+
+.Timeline_tick_label:hover {
+    color: #1745ff;
+}
+
+.Timeline_tick_mark {
+    position: absolute;
+    top: 0;
+    left: -1px;
+    width: 2px;
+    height: 14px;
+    background-color: #B4B4B8;
+}
+
+.Timeline_tick_label {
+    position: absolute;
+    top: 16px;
+    left: 0;
+    transform: translateX(-50%);
+    color: #666666;
+    font-size: 0.8em;
+    line-height: 1em;
+    white-space: nowrap;
+}
+
+#Timeline_label {
+    flex: 0 0 auto;
+    width: 7em;
+    margin-left: 1em;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    color: #1745ff;
+    font-weight: bold;
+}
+
+#Timeline_controls {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    margin-left: 0.75em;
+}
+
+#Timeline_controls button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.2em;
+    height: 1.8em;
+    margin-left: 0.25em;
+    border: 1px solid #1745ff;
+    border-radius: 4px;
+    padding: 0;
+    font: inherit;
+    color: #1745ff;
+    background-color: #FFFFFF;
+    cursor: pointer;
+}
+
+#Timeline_controls button:hover {
+    color: #FFFFFF;
+    background-color: #1745ff;
+}
+
+#Timeline_controls button svg {
+    width: 1.1em;
+    height: 1.1em;
+    fill: currentColor;
+}
+
+#Timeline_play .icon_pause {
+    display: none;
+}
+
+#Timeline_play.playing .icon_play {
+    display: none;
+}
+
+#Timeline_play.playing .icon_pause {
+    display: block;
+}
+
+#Follow {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    margin-left: 0.75em;
+    padding-left: 0.75em;
+    border-left: 1px solid #D2D2D6;
+}
+
+#Follow_eye {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.2em;
+    height: 1.8em;
+    border: 1px solid #1745ff;
+    border-radius: 4px;
+    padding: 0;
+    /* Buttons don't inherit the font, and mobile WebKit's default button
+       font-size is smaller, which shrinks the em-based dimensions */
+    font: inherit;
+    color: #1745ff;
+    background-color: #FFFFFF;
+    cursor: pointer;
+}
+
+#Follow_eye svg {
+    width: 1.3em;
+    height: 1.3em;
+    vertical-align: middle;
+}
+
+#Follow_eye .Follow_eye_body {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+}
+
+#Follow_eye .Follow_eye_pupil {
+    fill: currentColor;
+}
+
+/* Locked = shaded in: the whole button inverts to solid blue */
+#Follow_eye.locked {
+    color: #FFFFFF;
+    background-color: #1745ff;
+}
+
+#Follow_eye.locked .Follow_eye_body {
+    fill: currentColor;
+}
+
+#Follow_eye.locked .Follow_eye_pupil {
+    fill: #1745ff;
+}
+
+#Follow_eye:not(.disabled):not(.locked):hover {
+    background-color: #E8EDFF;
+}
+
+#Follow_eye.locked:hover {
+    background-color: #0F33CC;
+    border-color: #0F33CC;
+}
+
+/* Pre-load skeleton: the timeline renders with its real layout while the
+   data downloads, just greyed out and inert */
+#Timeline_controls button:disabled,
+#Timeline_controls button:disabled:hover,
+#Follow_eye:disabled,
+#Follow_eye:disabled:hover,
+#Follow_toggle:disabled,
+#Follow_toggle:disabled:hover {
+    border-color: #b1b1b1;
+    color: #b1b1b1;
+    background-color: #FFFFFF;
+    cursor: default;
+}
+
+#Timeline.loading #Timeline_track {
+    cursor: default;
+}
+
+#Timeline.loading #Timeline_label {
+    color: #b1b1b1;
+}
+
+#Timeline.loading #Timeline_slider::-webkit-slider-runnable-track {
+    background: #D2D2D6;
+}
+
+#Timeline.loading #Timeline_slider::-webkit-slider-thumb {
+    background-color: #b1b1b1;
+}
+
+#Timeline.loading #Timeline_slider::-moz-range-progress {
+    background-color: #D2D2D6;
+}
+
+#Timeline.loading #Timeline_slider::-moz-range-thumb {
+    background-color: #b1b1b1;
+}
+
+#Follow_eye.locked:hover .Follow_eye_pupil {
+    fill: #0F33CC;
+}
+
+/* No contestant picked yet */
+#Follow_eye.disabled {
+    border-color: #B4B4B8;
+    color: #B4B4B8;
+    cursor: default;
+}
+
+#Follow_picker {
+    position: relative;
+    margin-left: 0.5em;
+}
+
+#Follow_toggle {
+    display: flex;
+    align-items: center;
+    width: 14em;
+    height: 1.8em;
+    border: 1px solid #1745ff;
+    border-radius: 4px;
+    padding: 0 0.5em;
+    font: inherit;
+    color: #1745ff;
+    background-color: #FFFFFF;
+    cursor: pointer;
+}
+
+#Follow_toggle:hover {
+    background-color: #E8EDFF;
+}
+
+#Follow_picker.open #Follow_toggle {
+    border-color: #1745ff;
+    box-shadow: 0 0 0 2px rgba(23, 69, 255, 0.15);
+}
+
+#Follow_toggle_label {
+    flex: 1 1 auto;
+    text-align: left;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.Follow_chevron {
+    flex: 0 0 auto;
+    width: 1em;
+    height: 1em;
+    margin-left: 0.3em;
+    color: #1745ff;
+    transition: transform 0.15s;
+}
+
+#Follow_picker.open .Follow_chevron {
+    transform: rotate(180deg);
+}
+
+#Follow_menu {
+    display: none;
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    width: 22em;
+    border: 1px solid #E2E2E6;
+    border-radius: 8px;
+    background-color: #FFFFFF;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+    overflow: hidden;
+    z-index: 50;
+}
+
+#Follow_picker.open #Follow_menu {
+    display: block;
+}
+
+#Follow_search {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    border: none;
+    border-bottom: 1px solid #ECECEF;
+    padding: 0.6em 0.8em;
+    font: inherit;
+    outline: none;
+}
+
+#Follow_search::placeholder {
+    color: #AAAAAA;
+}
+
+#Follow_clear {
+    display: none;
+    width: 100%;
+    border: none;
+    border-bottom: 1px solid #ECECEF;
+    padding: 0.45em 0.8em;
+    text-align: left;
+    font: inherit;
+    color: #C03030;
+    background-color: #FFFFFF;
+    cursor: pointer;
+}
+
+#Follow.following #Follow_clear {
+    display: block;
+}
+
+#Follow_clear:hover {
+    background-color: #FFF3F3;
+}
+
+#Follow_list {
+    max-height: 17em;
+    overflow-y: auto;
+    padding: 0.25em 0;
+}
+
+.Follow_option {
+    display: flex;
+    align-items: center;
+    padding: 0.35em 0.8em;
+    cursor: pointer;
+}
+
+.Follow_option.hidden {
+    display: none;
+}
+
+.Follow_option.active {
+    background-color: #EEF2FF;
+}
+
+.Follow_option.selected::after {
+    content: "\2713";
+    flex: 0 0 auto;
+    margin-left: 0.5em;
+    color: #1745ff;
+    font-weight: bold;
+}
+
+.Follow_option_flag {
+    flex: 0 0 auto;
+    width: 1.4em;
+    margin-right: 0.5em;
+    border-radius: 2px;
+    box-shadow: 0 0 1px rgba(0, 0, 0, 0.4);
+}
+
+.Follow_option_id {
+    flex: 0 0 3.6em;
+    font-weight: bold;
+    font-variant-numeric: tabular-nums;
+    color: #555555;
+}
+
+.Follow_option.selected .Follow_option_id {
+    color: #1745ff;
+}
+
+.Follow_option_name {
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#Follow_empty {
+    display: none;
+    padding: 0.8em;
+    text-align: center;
+    color: #999999;
 }
 
 
@@ -255,6 +760,9 @@ abbr {
     box-sizing: content-box;
     top: 0;
     left: 256px;
+    /* Explicit, as the default width of search inputs varies per browser
+       and the filter pill sits at a fixed offset right of this */
+    width: 140px;
     height: 1.5em;
     margin: 0.5em;
     border: 0;
@@ -457,7 +965,7 @@ abbr {
 #Scoreboard {
     width: 100%;
     table-layout: fixed;
-    margin: 20px 0;
+    margin: 10px 0 20px 0;
 }
 
 #Scoreboard_cols col.sel {
@@ -874,6 +1382,52 @@ abbr {
    The animation stuff ends here.
  */
 
+/* Playback effects: rank-delta badges and sliding rows, triggered by the
+   timeline while replaying the contest (the flashes on changed score cells
+   are Web Animations, see Scoreboard.flash_cell). */
+
+/* The badge container: a fixed layer over the page, deliberately outside
+   the table's subtree (a composited descendant inside the table makes
+   every table mutation expensive on iOS WebKit; see
+   Scoreboard.show_rank_delta) */
+#RankDeltaOverlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 30;
+    pointer-events: none;
+}
+
+.rank_delta {
+    /* Only the fade-in/out animation (Scoreboard.show_rank_delta) ever
+       makes a badge visible; positioning comes from the inline transform
+       set from the cached row geometry */
+    opacity: 0;
+    position: fixed;
+    top: 0;
+    left: 0;
+    font-size: 0.75em;
+    line-height: 1.2em;
+    font-weight: bold;
+    white-space: nowrap;
+    pointer-events: none;
+}
+
+.rank_delta.up {
+    color: #217A2B;
+}
+
+.rank_delta.down {
+    color: #C03030;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    #Scoreboard_body tr {
+        transition: none !important;
+        transform: none !important;
+    }
+}
+
 #Scoreboard_body tr td.score {
     opacity: 0.75;
     border-radius: 5px;
@@ -1213,83 +1767,208 @@ abbr {
 }
 
 
-/* Style for the network status indicator */
+/* Style for the display settings */
 
-#ConnectionStatus_box {
-    display: inline-block;
+#Settings_box {
     position: relative;
     float: right;
     margin: 0.5em;
-    text-align: right;
-    z-index: 2;
+    z-index: 6;
 }
 
-#ConnectionStatus_label {
-    display: inline-block;
-    position: relative;
-    height: 1.3em;
-    padding: 0.25em 20px;
-    z-index: 2;
-    border-width: 1px;
-    border-style: solid;
+#Settings_button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.2em;
+    height: 1.8em;
+    border: 1px solid #1745ff;
     border-radius: 4px;
-    -webkit-user-select: none;
-    -moz-user-select: none;
-    -ms-user-select: none;
-    -o-user-select: none;
-    user-select: none;
+    padding: 0;
+    /* Buttons don't inherit the font, and mobile WebKit's default button
+       font-size is smaller, which shrinks the em-based dimensions */
+    font: inherit;
+    color: #1745ff;
+    background-color: #FFFFFF;
+    cursor: pointer;
 }
 
-#ConnectionStatus_box:hover #ConnectionStatus_label {
-    border-bottom-width: 0;
-    border-bottom-left-radius: 0;
-    border-bottom-right-radius: 0;
+#Settings_box.open #Settings_button {
+    color: #FFFFFF;
+    background-color: #1745ff;
 }
 
-#ConnectionStatus_text {
+#Settings_panel {
     display: none;
-    position: fixed;
-    top: 2.5em;
-    right: 0.5em;
-    padding: 0.5em;
-    margin-top: -1px;
-    z-index: 1;
-    border-width: 1px;
-    border-style: solid;
-    border-radius: 4px 0 4px 4px;
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    width: 20em;
+    padding: 0.6em 0.8em;
+    background-color: #FFFFFF;
+    border: 1px solid #b1b1b1;
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    text-align: left;
 }
 
-#ConnectionStatus_box:hover #ConnectionStatus_text,
-#ConnectionStatus_text:hover {
+/* The caret anchoring the panel to the gear button above it (2.2em wide
+   at the box's right edge): a bordered triangle needs two stacked ones,
+   the border-colored one a pixel taller than the white fill */
+#Settings_panel::before,
+#Settings_panel::after {
+    content: "";
+    position: absolute;
+    bottom: 100%;
+    right: calc(1.1em - 6px);
+    border: 6px solid transparent;
+    border-top: none;
+    border-bottom-color: #b1b1b1;
+}
+
+#Settings_panel::after {
+    bottom: calc(100% - 1px);
+    right: calc(1.1em - 5px);
+    border-width: 5px;
+    border-top: none;
+    border-bottom-color: #FFFFFF;
+}
+
+#Settings_box.open #Settings_panel {
     display: block;
 }
 
-#ConnectionStatus_box[data-status="connected"] #ConnectionStatus_label,
-#ConnectionStatus_box[data-status="connected"] #ConnectionStatus_text {
-    background-color: white;
-    color: green;
-    border-color: green;
+#Settings_title {
+    font-weight: bold;
+    margin-bottom: 0.5em;
 }
 
-#ConnectionStatus_box[data-status="reconnecting"] #ConnectionStatus_label,
-#ConnectionStatus_box[data-status="reconnecting"] #ConnectionStatus_text {
-    background-color: yellow;
-    color: black;
-    border-color: black;
+.Settings_row {
+    display: flex;
+    align-items: center;
 }
 
-#ConnectionStatus_box[data-status="disconnected"] #ConnectionStatus_label,
-#ConnectionStatus_box[data-status="disconnected"] #ConnectionStatus_text,
-#ConnectionStatus_box[data-status="outdated"] #ConnectionStatus_label,
-#ConnectionStatus_box[data-status="outdated"] #ConnectionStatus_text,
-#ConnectionStatus_box[data-status="init_error"] #ConnectionStatus_label,
-#ConnectionStatus_box[data-status="init_error"] #ConnectionStatus_text {
+/* A setting nested under the one above it (passive drops refine the rank
+   badges); it gets disabled when its parent is off */
+.Settings_row.Settings_sub {
+    margin-left: 1.4em;
+}
+
+.Settings_item input:disabled,
+.Settings_item input:disabled + span {
+    color: #9B9B9F;
+    cursor: default;
+}
+
+.Settings_item {
+    display: flex;
+    align-items: center;
+    gap: 0.4em;
+    padding: 0.25em 0;
+    cursor: pointer;
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+.Settings_info {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.3em;
+    height: 1.3em;
+    margin-left: 0.5em;
+    border: 1px solid #b1b1b1;
+    border-radius: 50%;
+    padding: 0;
+    font: inherit;
+    font-size: 0.8em;
+    font-weight: bold;
+    font-style: italic;
+    font-family: Georgia, serif;
+    color: #666666;
+    background-color: #FFFFFF;
+    cursor: pointer;
+}
+
+.Settings_info.active {
+    color: #FFFFFF;
+    background-color: #1745ff;
+    border-color: #1745ff;
+}
+
+/* A floating tooltip bubble next to the pointer (or the tapped info
+   button, on touch screens) */
+#Settings_tooltip {
+    display: none;
+    position: fixed;
+    z-index: 60;
+    max-width: 16em;
+    padding: 0.4em 0.6em;
+    border-radius: 4px;
+    background-color: #333333;
+    font-size: 0.85em;
+    color: #FFFFFF;
+    pointer-events: none;
+}
+
+#Settings_tooltip.visible {
+    display: block;
+}
+
+#Settings_notice {
+    display: none;
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    width: 16em;
+    padding: 0.5em 0.7em;
+    background-color: #333333;
+    color: #FFFFFF;
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    text-align: left;
+    cursor: pointer;
+}
+
+/* The arrow anchoring the notice to the gear button above it: centered
+   under the button, which is 2.2em wide at the box's right edge */
+#Settings_notice::before {
+    content: "";
+    position: absolute;
+    bottom: 100%;
+    right: calc(1.1em - 6px);
+    border: 6px solid transparent;
+    border-top: none;
+    border-bottom-color: #333333;
+}
+
+#Settings_notice.visible {
+    display: block;
+}
+
+/* The panel wins if both are somehow shown */
+#Settings_box.open #Settings_notice {
+    display: none;
+}
+
+#Settings_warning {
+    display: none;
+    margin: 0 0 0.25em 1.8em;
+    font-size: 0.85em;
+    color: #c4a000;
+}
+
+#Settings_warning.visible {
+    display: block;
+}
+
+#LoadError {
+    display: none;
+    float: right;
+    margin: 0.5em;
+    padding: 0.25em 0.5em;
+    border: 1px solid red;
+    border-radius: 4px;
     background-color: red;
     color: white;
-    border-color: red;
-}
-
-#ConnectionStatus_box a {
-    cursor: pointer;
-    text-decoration: underline;
 }

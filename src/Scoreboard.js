@@ -18,6 +18,7 @@
 import $ from "jquery";
 import Config from "./Config.js";
 import DataStore, {round_to_str} from "./DataStore.js";
+import Settings from "./Settings.js";
 import UserDetail from "./UserDetail.js";
 
 var escapeHTML = (function() {
@@ -53,6 +54,18 @@ export default new function () {
         DataStore.user_delete.add(self.delete_user);
 
         DataStore.select_events.add(self.select_handler);
+
+        // The cached table geometry is only valid for the current layout
+        $(window).on("resize", function () {
+            self.geometry = undefined;
+            self.reposition_overlay_badges();
+        });
+
+        Settings.on_change(function (name) {
+            if (name === "global_ranks") {
+                self.update_ranks();
+            }
+        });
     };
 
 
@@ -115,6 +128,15 @@ export default new function () {
         // Fuck, WebKit!!
         self.tbody_el.on('webkitAnimationEnd', 'tr', function(event) {
             $(this).removeClass("score_up score_down");
+        });
+
+        // Cleanup for the playback effects (see the section further down)
+        self.tbody_el.on("animationend", "td.score", function () {
+            $(this).removeClass("cell_up cell_down");
+        });
+
+        self.tbody_el.on("transitionend", "tr", function () {
+            this.style.transition = "";
         });
     };
 
@@ -255,8 +277,12 @@ export default new function () {
             $(user["row"]).toggleClass("filtered_out", self.is_filtered_out(user));
         }
 
+        // Hiding or showing rows changes every measurement in the cache
+        self.geometry = undefined;
+
         self.update_ranks();
         self.update_filter_ui();
+        self.reposition_overlay_badges();
     };
 
     self.selected_count = function () {
@@ -291,7 +317,7 @@ export default new function () {
         var result = " \
 <tr class=\"user" + (user["selected"] > 0 ? " selected color" + user["selected"] : "") + (self.is_filtered_out(user) ? " filtered_out" : "") + "\" data-user=\"" + user["key"] + "\"> \
     <td class=\"sel\"></td> \
-    <td class=\"rank medal-" + Config.get_medal(user["rank"]) + "\">" + self.format_rank(user) + "</td> \
+    <td class=\"rank medal-" + Config.get_medal(user["rank"]) + "\"><span class=\"rank_label\">" + self.format_rank(user) + "</span></td> \
     <td colspan=\"10\" class=\"f_name\">" + escapeHTML(user["f_name"]) + "</td> \
     <td colspan=\"10\" class=\"l_name\">" + escapeHTML(user["l_name"]) + "</td> \
     <td class=\"user_id\">" + user["display_key"] + "</td>";
@@ -420,6 +446,28 @@ export default new function () {
     };
 
 
+    // Local ranks (as displayed under the current sorting and filtering) for
+    // all users at once, keyed by user id. The timeline snapshots this
+    // before and after a playback batch to compute rank deltas.
+    self.get_local_ranks = function () {
+        const sort_key = self.sort_key;
+        const list = self.filtering
+            ? self.user_list.filter(u => !self.is_filtered_out(u))
+            : self.user_list;
+
+        const sorted = list.slice().sort((a, b) => b[sort_key] - a[sort_key]);
+
+        var result = new Object();
+        var rank = 1;
+        for (var i = 0; i < sorted.length; i += 1) {
+            if (i > 0 && sorted[i][sort_key] < sorted[i - 1][sort_key]) {
+                rank = i + 1;
+            }
+            result[sorted[i]["key"]] = rank;
+        }
+        return result;
+    };
+
     // Get the rank for the current scoreboard order
     self.get_local_rank = function (user) {
         const sort_key = self.sort_key;
@@ -429,26 +477,116 @@ export default new function () {
         return list.filter(u => u[sort_key] > user[sort_key]).length + 1;
     }
 
-    // Get what the rank should look like for the given user
-    self.format_rank = function (user) {
-        const global_rank = user.rank, local_rank = self.get_local_rank(user);
+    // Get what the rank should look like for the given user. The local rank
+    // can be passed in when it's already known (batch updates compute all of
+    // them at once, which is much cheaper than one get_local_rank per user).
+    self.format_rank = function (user, local_rank) {
+        const global_rank = user.rank;
+        if (local_rank === undefined) {
+            local_rank = self.get_local_rank(user);
+        }
 
-        if (global_rank === local_rank) {
-            return global_rank.toString();
+        if (global_rank === local_rank || !Settings.get("global_ranks")) {
+            return local_rank.toString();
         } else {
             return `${local_rank} (${global_rank})`;
         }
     }
 
     self.update_ranks = function () {
+        var local_ranks = self.get_local_ranks();
         for (const user of self.user_list) {
-            self.update_rank(user);
+            // Filtered-out rows are hidden, so their cells can wait until
+            // the filter is turned off
+            if (local_ranks[user["key"]] !== undefined) {
+                self.update_rank(user, local_ranks[user["key"]]);
+            }
         }
     }
 
-    // Update the rank cell for the given user
-    self.update_rank = function (user) {
-        $(user.row).find(".rank").text(self.format_rank(user));
+    // Update the rank cell for the given user. Only the label span is
+    // rewritten: the cell also hosts the transient rank-delta badge, which
+    // a .text() on the cell itself would destroy. The last written text and
+    // class are cached on the user so unchanged cells aren't touched at all
+    // (this runs for every user on every replay tick of the timeline).
+    self.update_rank = function (user, local_rank) {
+        var text = self.format_rank(user, local_rank);
+        var cls = "rank medal-" + Config.get_medal(user["rank"]);
+
+        if (user["rank_cell_text"] === text && user["rank_cell_class"] === cls) {
+            return;
+        }
+        user["rank_cell_text"] = text;
+        user["rank_cell_class"] = cls;
+
+        var $rank = $(user.row).children("td.rank");
+        $rank.attr("class", cls);
+        $rank.children(".rank_label").text(text);
+    }
+
+    // Rewrite the score cells of the given user that actually changed. The
+    // cells and their static parameters are resolved once per user, and the
+    // last written score is remembered, since this runs for every dirty user
+    // on every replay tick.
+    self.refresh_user = function (user) {
+        if (user["score_cells"] === undefined) {
+            user["score_cells"] = [];
+            $(user["row"]).children("td.score").each(function () {
+                var $this = $(this);
+                var precision, max_score;
+
+                if ($this.hasClass("global")) {
+                    precision = DataStore.global_score_precision;
+                    max_score = DataStore.global_max_score;
+                } else if ($this.hasClass("contest")) {
+                    var contest = DataStore.contests[$this.data("contest")];
+                    precision = contest["score_precision"];
+                    max_score = contest["max_score"];
+                } else {
+                    var task = DataStore.tasks[$this.data("task")];
+                    precision = task["score_precision"];
+                    max_score = task["max_score"];
+                }
+
+                // The heatmap class the cell currently carries; the score is
+                // left unknown so that the first pass rewrites every cell
+                var score_class = null;
+                for (const cls of this.classList) {
+                    if (cls.lastIndexOf("score_", 0) == 0) {
+                        score_class = cls;
+                        break;
+                    }
+                }
+
+                user["score_cells"].push({
+                    "cell": this,
+                    "sort_key": $this.data("sort_key"),
+                    "precision": precision,
+                    "max_score": max_score,
+                    "score": null,
+                    "score_class": score_class
+                });
+            });
+        }
+
+        for (const entry of user["score_cells"]) {
+            var score = user[entry["sort_key"]];
+            if (score === entry["score"]) {
+                continue;
+            }
+            entry["score"] = score;
+
+            var score_class = self.get_score_class(score, entry["max_score"]);
+            if (score_class !== entry["score_class"]) {
+                if (entry["score_class"] !== null) {
+                    entry["cell"].classList.remove(entry["score_class"]);
+                }
+                entry["cell"].classList.add(score_class);
+                entry["score_class"] = score_class;
+            }
+
+            entry["cell"].textContent = round_to_str(score, entry["precision"]);
+        }
     }
 
     // Sort the scoreboard using the column with the given index.
@@ -457,14 +595,26 @@ export default new function () {
 
         list.sort(self.compare_users);
 
-        var fragment = document.createDocumentFragment();
+        // All the local ranks in one sweep, rather than one O(n) scan each
+        var local_ranks = self.get_local_ranks();
+
+        // Only move the rows that are out of place: re-inserting a row
+        // restarts its CSS animations, so rows that didn't move must not be
+        // touched (and this is much cheaper during playback, too)
+        var tbody = self.tbody_el[0];
         for (const [idx, user] of list.entries()) {
             user["index"] = idx;
-            fragment.appendChild(user["row"]);
-            self.update_rank(user);
+            if (tbody.children[idx] !== user["row"]) {
+                tbody.insertBefore(user["row"], tbody.children[idx] || null);
+            }
+            // Filtered-out rows are hidden: their rank cells are refreshed
+            // by update_ranks when the filter is turned off
+            if (local_ranks[user["key"]] !== undefined) {
+                self.update_rank(user, local_ranks[user["key"]]);
+            }
         }
 
-        self.tbody_el.append(fragment);
+        self.reposition_overlay_badges();
     };
 
 
@@ -564,9 +714,8 @@ export default new function () {
 
     // This callback is called by the DataStore when a user changes rank.
     self.rank_handler = function (u_id, user) {
-        var $row = $(user["row"]);
-
-        $row.children("td.rank").text(self.format_rank(user));
+        user["rank_cell_text"] = self.format_rank(user);
+        $(user["row"]).children("td.rank").children(".rank_label").text(user["rank_cell_text"]);
     };
 
 
@@ -595,5 +744,335 @@ export default new function () {
         var $frame = $("#InnerFrame");
         var scroll = $row.position().top + $row.height() / 2 - $frame.height() / 2;
         $frame.scrollTop(scroll);
+    };
+
+
+    ////// Playback effects
+    //
+    // Transient, viewport-gated bits of feedback used by the timeline while
+    // replaying the contest: a flash on a score cell that changed, a little
+    // rank-delta badge, and rows sliding to their new position (FLIP).
+
+    // Row positions are computed from the sorted index and a once-measured
+    // row height instead of reading tr.offsetTop: layout reads between the
+    // DOM writes of a replay tick force a synchronous reflow of the whole
+    // table, which dominated the profile on slow devices
+    self.measure_geometry = function () {
+        var frame = $("#InnerFrame")[0];
+        var tbody = self.tbody_el[0];
+        // With a filter active the hidden rows take up no space, so only
+        // the visible ones count towards the measurements
+        var first_row = self.filtering ?
+            tbody.querySelector("tr:not(.filtered_out)") :
+            tbody.firstElementChild;
+        var row_count = self.filtering ?
+            tbody.querySelectorAll("tr:not(.filtered_out)").length :
+            tbody.childElementCount;
+
+        // The row height must keep its fractional part (offsetHeight rounds
+        // to an integer): index * height accumulates the rounding error to
+        // whole rows' worth by the bottom of the table, e.g. when centering
+        // on a followed row. Averaging over the whole body also irons out
+        // per-row rounding of borders.
+        var row_height = 0;
+        if (row_count > 0) {
+            row_height = tbody.getBoundingClientRect().height / row_count;
+        }
+
+        var frame_rect = frame.getBoundingClientRect();
+        // Where the badge gutter sits on screen, for the overlay badges: to
+        // the left of the selection-checkbox column of whatever row is at
+        // the top
+        var sel_cell = first_row !== null ?
+                       first_row.querySelector("td.sel") : null;
+        var sel_rect = sel_cell !== null ?
+                       sel_cell.getBoundingClientRect() : {"left": 0};
+
+        self.geometry = {
+            "table_top": $("#Scoreboard")[0].offsetTop,
+            "row_base": first_row !== null ? first_row.offsetTop : 0,
+            "row_height": row_height,
+            "frame": frame,
+            "frame_height": frame.clientHeight,
+            "frame_top": frame_rect.top,
+            "frame_bottom": frame_rect.bottom,
+            "gutter_right": sel_rect.left - 5
+        };
+    };
+
+    // The offset of the user's row from the top of the table
+    self.row_offset = function (user) {
+        return self.geometry["row_base"] +
+               user["index"] * self.geometry["row_height"];
+    };
+
+    // Like row_offset, but valid with a filter active too: hidden rows keep
+    // their sorted index, so indexes then no longer map to positions and the
+    // layout is read instead (the filtered table is small, which keeps the
+    // forced reflow affordable)
+    self.row_top = function (user) {
+        return self.filtering ? user["row"].offsetTop : self.row_offset(user);
+    };
+
+    // The currently visible vertical span, in row-offset coordinates. Call
+    // it before mutating the DOM, while the layout is still clean.
+    self.visible_range = function () {
+        if (self.geometry === undefined) {
+            self.measure_geometry();
+        }
+
+        var top = self.geometry["frame"].scrollTop - self.geometry["table_top"];
+        return {
+            "top": top,
+            "bottom": top + self.geometry["frame_height"]
+        };
+    };
+
+    self.is_row_visible = function (user, range) {
+        // A hidden row reads offsetTop 0, which could pass the range check
+        if (self.is_filtered_out(user)) {
+            return false;
+        }
+        var top = self.row_top(user);
+        return top + self.geometry["row_height"] > range["top"] &&
+               top < range["bottom"];
+    };
+
+    // One-shot flash on the task cell whose score just changed. The flash
+    // is an inset shadow so the cell's own background shows through as it
+    // fades; it's driven with the Web Animations API since restarting a CSS
+    // animation needs a forced reflow, which is far too slow to do per cell
+    // per replay tick.
+    self.flash_cell = function (user, t_id, direction) {
+        var cells = user["score_cells"];
+        if (cells === undefined) {
+            return;
+        }
+
+        var sort_key = "t_" + t_id;
+        for (const entry of cells) {
+            if (entry["sort_key"] !== sort_key) {
+                continue;
+            }
+
+            var color = direction > 0 ? "138, 226, 52" : "239, 41, 41";
+            if (entry["flash"] !== undefined) {
+                entry["flash"].cancel();
+            }
+            entry["flash"] = entry["cell"].animate([
+                {"boxShadow": "inset 0 0 0 2em rgba(" + color + ", 0.65)"},
+                {"boxShadow": "inset 0 0 0 2em rgba(" + color + ", 0)"}
+            ], {"duration": 500, "easing": "ease-out"});
+            return;
+        }
+    };
+
+    // A fading "climbed/dropped n places" badge, shown in the gutter left
+    // of the row while replaying. The badges live in one fixed-position
+    // container over the page rather than inside the table rows: on iOS
+    // WebKit any composited descendant inside the table (even a single
+    // static one) puts the table into an expensive compositing
+    // configuration that every replay tick pays for, while the same
+    // animation in a layer with no table ancestry is cheap.
+    self.init_delta_overlay = function () {
+        self.overlay_el = document.createElement("div");
+        self.overlay_el.id = "RankDeltaOverlay";
+        document.body.appendChild(self.overlay_el);
+        // Badges must track their rows when the scoreboard scrolls, too
+        $("#InnerFrame").on("scroll", self.reposition_overlay_badges);
+        // Badges are recycled: a live one is reused for its own row, and a
+        // finished one goes back to the pool rather than being destroyed
+        self.overlay_pool = new Array();
+        self.overlay_live = new Array();
+    };
+
+    self.overlay_badge = function () {
+        if (self.overlay_el === undefined) {
+            self.init_delta_overlay();
+        }
+        var badge = self.overlay_pool.pop();
+        if (badge === undefined) {
+            badge = document.createElement("span");
+            self.overlay_el.appendChild(badge);
+        }
+        return badge;
+    };
+
+    // Place a badge at its row's current position on screen, hiding it when
+    // the row is scrolled out of the scoreboard frame. Positions come from
+    // the cached row geometry, never from a layout read.
+    self.place_overlay_badge = function (entry) {
+        if (self.geometry === undefined) {
+            self.measure_geometry();
+        }
+        var geometry = self.geometry;
+        var top = geometry["frame_top"] +
+                  self.row_top(entry["user"]) + geometry["table_top"] -
+                  geometry["frame"].scrollTop +
+                  geometry["row_height"] / 2;
+        var visible = !self.is_filtered_out(entry["user"]) &&
+                      top > geometry["frame_top"] &&
+                      top < geometry["frame_bottom"];
+
+        // The badge's right edge sits at the gutter, vertically centered
+        entry["badge"].style.transform =
+            "translate(" + geometry["gutter_right"] + "px, " + top + "px) " +
+            "translate(-100%, -50%)";
+        entry["badge"].style.visibility = visible ? "" : "hidden";
+    };
+
+    // Keep live badges glued to their rows as the standings reorder or the
+    // scoreboard scrolls
+    self.reposition_overlay_badges = function () {
+        if (self.overlay_live === undefined) {
+            return;
+        }
+        for (const entry of self.overlay_live) {
+            self.place_overlay_badge(entry);
+        }
+    };
+
+    // A badge younger than this cannot be cut short by movement against
+    // it: a jump must stay readable for a moment even if the row slides
+    // right back down (the slide is shown once the badge has aged)
+    const MIN_BADGE_MS = 1000;
+
+    // Cut the user's live badge short, so that the next movement starts a
+    // fresh one counting from scratch (used by the timeline when a passive
+    // drop-batching window rolls over). Respects the minimum age: a young
+    // badge stays up, and further movement folds into it instead.
+    self.end_rank_delta = function (user) {
+        var entry = user["delta_entry"];
+        if (entry !== undefined && entry["anim"].playState === "running" &&
+            entry["anim"].currentTime >= MIN_BADGE_MS) {
+            entry["anim"].cancel();
+        }
+    };
+
+    // The optional duration stretches the fade: active badges use the
+    // default, while the passive-drop badges last as long as their
+    // batching window, so that a sustained slide keeps one badge up
+    // rather than pulsing new ones (see Timeline)
+    self.show_rank_delta = function (user, old_rank, new_rank, duration) {
+        var entry = user["delta_entry"];
+        var active = entry !== undefined && entry["anim"].playState === "running";
+
+        // Movement against the badge's displayed direction starts a fresh
+        // badge instead of netting out (a +10 bounce during a slide must
+        // read +10, not shrink the visible minus), and also resets the
+        // drop-batching window (see Timeline)
+        if (active) {
+            var shown = user["delta_from"] - user["delta_last"];
+            var fresh = old_rank - new_rank;
+            if (fresh != 0 && (fresh > 0) != (shown > 0)) {
+                // A young badge is left up untouched: the jump it shows
+                // must stay readable even if the row moves back right
+                // away (a passive slide isn't lost — its batching window
+                // keeps counting, and a later tick will show it)
+                if (entry["anim"].currentTime < MIN_BADGE_MS) {
+                    return;
+                }
+                entry["anim"].cancel();
+                active = false;
+                user["drop_start"] = undefined;
+            }
+        }
+
+        // While a badge is showing, fold further movement in its own
+        // direction into it in place rather than restarting it (rapid rank
+        // changes would otherwise flash constantly)
+        var from = active ? user["delta_from"] : old_rank;
+        if (!active) {
+            user["delta_from"] = from;
+        }
+        user["delta_last"] = new_rank;
+        var delta = from - new_rank;
+
+        if (delta == 0) {
+            if (active) {
+                entry["anim"].cancel();
+            }
+            return;
+        }
+
+        if (!active) {
+            var badge = self.overlay_badge();
+            entry = {"user": user, "badge": badge};
+            user["delta_entry"] = entry;
+            self.overlay_live.push(entry);
+
+            entry["anim"] = badge.animate([
+                {"opacity": 0},
+                {"opacity": 1, "offset": 0.15},
+                {"opacity": 1, "offset": 0.7},
+                {"opacity": 0}
+            ], {"duration": duration || 2000, "easing": "ease-out"});
+            entry["anim"].onfinish = entry["anim"].oncancel = function () {
+                var index = self.overlay_live.indexOf(entry);
+                if (index !== -1) {
+                    self.overlay_live.splice(index, 1);
+                }
+                badge.style.visibility = "hidden";
+                self.overlay_pool.push(badge);
+                if (user["delta_entry"] === entry) {
+                    user["delta_entry"] = undefined;
+                }
+            };
+        }
+
+        entry["badge"].className = delta > 0 ? "rank_delta up" : "rank_delta down";
+        entry["badge"].textContent =
+            (delta > 0 ? "\u25B2" : "\u25BC") + Math.abs(delta);
+        self.place_overlay_badge(entry);
+    };
+
+    // Record every row's vertical position; pass the result to animate_sort
+    // after re-sorting to slide the rows from where they were
+    self.measure_rows = function () {
+        var result = new Object();
+        for (const user of self.user_list) {
+            result[user["key"]] = user["row"].offsetTop;
+        }
+        return result;
+    };
+
+    self.animate_sort = function (before) {
+        var range = self.visible_range();
+        var moved = new Array();
+
+        for (const user of self.user_list) {
+            var row = user["row"];
+            var delta = before[user["key"]] - row.offsetTop;
+            if (delta == 0) {
+                continue;
+            }
+
+            // Only rows that are (or were) in the viewport get to slide
+            var was_visible = before[user["key"]] + row.offsetHeight > range["top"] &&
+                              before[user["key"]] < range["bottom"];
+            if (!was_visible && !self.is_row_visible(user, range)) {
+                continue;
+            }
+
+            moved.push([row, delta]);
+        }
+
+        // A stampede of sliding rows cannot be followed anyway
+        if (moved.length == 0 || moved.length > 40) {
+            return;
+        }
+
+        for (const [row, delta] of moved) {
+            row.style.transition = "none";
+            row.style.transform = "translateY(" + delta + "px)";
+        }
+
+        // Force a reflow so the starting offsets take hold before the slide
+        void self.tbody_el[0].offsetWidth;
+
+        for (const [row] of moved) {
+            row.style.transition = "transform 0.25s ease-out";
+            row.style.transform = "";
+        }
     };
 };
