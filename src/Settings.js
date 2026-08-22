@@ -75,12 +75,21 @@ export default new function () {
             self.set(this.dataset["setting"], this.checked);
         });
 
-        // The info buttons show their explanation in a shared tooltip area
-        // at the bottom of the panel: on hover where the device supports
-        // it, and by tapping (toggling) on touch screens, where there is
-        // no hover.
+        // The info buttons show their explanation in a floating tooltip
+        // bubble: next to the pointer on hover where the device supports
+        // it, and anchored to the tapped button on touch screens, where
+        // there is no hover.
         var tooltip_el = $("#Settings_tooltip");
         var info_els = self.panel_el.find(".Settings_info").text("i");
+
+        // The bubble grows to the left: the panel sits at the right edge
+        // of the screen, so there is no room on the right
+        var place_tooltip = function (x, y) {
+            tooltip_el.css({
+                "right": (window.innerWidth - x + 8) + "px",
+                "top": (y + 12) + "px"
+            });
+        };
 
         var show_info = function (button) {
             info_els.removeClass("active");
@@ -92,8 +101,11 @@ export default new function () {
         };
 
         if (window.matchMedia("(hover: hover)").matches) {
-            info_els.on("mouseenter", function () {
+            info_els.on("mouseenter", function (event) {
                 show_info($(this));
+                place_tooltip(event.clientX, event.clientY);
+            }).on("mousemove", function (event) {
+                place_tooltip(event.clientX, event.clientY);
             }).on("mouseleave", function () {
                 show_info(undefined);
             });
@@ -101,6 +113,10 @@ export default new function () {
             info_els.on("click", function () {
                 var active = $(this).hasClass("active");
                 show_info(active ? undefined : $(this));
+                if (!active) {
+                    var rect = this.getBoundingClientRect();
+                    place_tooltip(rect.right, rect.bottom);
+                }
             });
         }
 
