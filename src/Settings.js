@@ -152,6 +152,17 @@ export default new function () {
         self.notify(name);
     };
 
+    // Forget the remembered slow verdict and the shown-notice flag, so the
+    // auto-disable flow can run (and be tried out) again on this device
+    self.reset_effects_verdict = function () {
+        try {
+            window.localStorage.removeItem(VERDICT_KEY);
+            window.localStorage.removeItem(NOTICE_KEY);
+        } catch (error) {
+            // Storage may be unavailable (private mode)
+        }
+    };
+
     // Called by the timeline when replay frames run slow while animations
     // are enabled: remember the verdict and, for any animation setting the
     // user never explicitly toggled, let the now-off default kick in
@@ -185,7 +196,14 @@ export default new function () {
         var dismiss = function () {
             notice.removeClass("visible");
         };
-        notice.on("click", dismiss);
+        // Clicking the notice opens the settings panel it talks about; the
+        // stopPropagation keeps the document-level close-on-click handler
+        // from immediately closing it again
+        notice.off("click").on("click", function (event) {
+            event.stopPropagation();
+            dismiss();
+            self.box_el.addClass("open");
+        });
         window.setTimeout(dismiss, 8000);
     };
 

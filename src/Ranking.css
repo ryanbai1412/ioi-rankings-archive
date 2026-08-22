@@ -1774,7 +1774,7 @@ abbr {
 #Settings_panel {
     display: none;
     position: absolute;
-    top: calc(100% + 4px);
+    top: calc(100% + 6px);
     right: 0;
     width: 20em;
     padding: 0.6em 0.8em;
@@ -1783,6 +1783,28 @@ abbr {
     border-radius: 4px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
     text-align: left;
+}
+
+/* The caret anchoring the panel to the gear button above it (2.2em wide
+   at the box's right edge): a bordered triangle needs two stacked ones,
+   the border-colored one a pixel taller than the white fill */
+#Settings_panel::before,
+#Settings_panel::after {
+    content: "";
+    position: absolute;
+    bottom: 100%;
+    right: calc(1.1em - 6px);
+    border: 6px solid transparent;
+    border-top: none;
+    border-bottom-color: #b1b1b1;
+}
+
+#Settings_panel::after {
+    bottom: calc(100% - 1px);
+    right: calc(1.1em - 5px);
+    border-width: 5px;
+    border-top: none;
+    border-bottom-color: #FFFFFF;
 }
 
 #Settings_box.open #Settings_panel {
@@ -1857,7 +1879,7 @@ abbr {
 #Settings_notice {
     display: none;
     position: absolute;
-    top: calc(100% + 4px);
+    top: calc(100% + 6px);
     right: 0;
     width: 16em;
     padding: 0.5em 0.7em;
@@ -1867,6 +1889,18 @@ abbr {
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
     text-align: left;
     cursor: pointer;
+}
+
+/* The arrow anchoring the notice to the gear button above it: centered
+   under the button, which is 2.2em wide at the box's right edge */
+#Settings_notice::before {
+    content: "";
+    position: absolute;
+    bottom: 100%;
+    right: calc(1.1em - 6px);
+    border: 6px solid transparent;
+    border-top: none;
+    border-bottom-color: #333333;
 }
 
 #Settings_notice.visible {
