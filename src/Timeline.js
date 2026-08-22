@@ -55,6 +55,10 @@ export default new function () {
 
     self.speed_idx = 0;
     self.playing = false;
+    // Set while scrubbing mid-playback, to resume once the thumb is released
+    self.resume_after_scrub = false;
+    // Set when playback skipped an overview redraw, to catch up on pause
+    self.overview_stale = false;
 
     self.init = function () {
         self.contests = DataStore.contest_list;
@@ -67,6 +71,11 @@ export default new function () {
 
         self.slider_el = $("#Timeline_slider");
         self.slider_el.attr({"min": 0, "max": SLIDER_STEPS, "value": SLIDER_STEPS});
+
+        // update_ui runs on every animation frame during playback
+        self.play_el = $("#Timeline_play");
+        self.speed_el = $("#Timeline_speed");
+        self.label_el = $("#Timeline_label");
 
         self.slider_el.on("input", function () {
             // Read the value before pausing: pause() refreshes the UI, which
@@ -212,10 +221,17 @@ export default new function () {
         // so a batch of crossed events nets out for the flash effects
         var first_score = new Object();
         var last_score = new Object();
+
+        // Flashes and badges can't be read at high playback speeds, so they
+        // switch off there; rows only slide on discrete jumps (paused
+        // scrubs, steps, seeks), where a single reorder can be followed
+        var effects = !self.playing || SPEEDS[self.speed_idx] <= 4;
+        var slide = effects && !self.playing;
+
         // Ranks in the currently displayed sorting, snapshotted before the
         // events mutate any scores, so the rank-delta badges reflect the
         // active column rather than always the global standings
-        var old_ranks = Scoreboard.get_local_ranks();
+        var old_ranks = effects ? Scoreboard.get_local_ranks() : null;
 
         while (self.applied < self.events.length &&
                self.events[self.applied]["time"] <= time) {
@@ -256,12 +272,6 @@ export default new function () {
             Scoreboard.refresh_user(DataStore.users[u_id]);
         }
 
-        // Flashes and badges can't be read at high playback speeds, so they
-        // switch off there; rows only slide on discrete jumps (paused
-        // scrubs, steps, seeks), where a single reorder can be followed
-        var effects = !self.playing || SPEEDS[self.speed_idx] <= 4;
-        var slide = effects && !self.playing;
-
         var measured = slide ? Scoreboard.measure_rows() : null;
 
         // Ranks (and thus the order) may have changed for everyone
@@ -298,6 +308,18 @@ export default new function () {
                 }
             }
         }
+
+        // Redrawing the overview chart (SVG) is too slow to do every tick,
+        // so during playback it's deferred until the next pause
+        if (self.playing) {
+            self.overview_stale = true;
+        } else {
+            self.update_overview();
+        }
+    };
+
+    self.update_overview = function () {
+        self.overview_stale = false;
 
         Overview.recompute();
         Overview.update_score_chart(0);
@@ -436,8 +458,11 @@ export default new function () {
 
         self.playing = false;
         window.cancelAnimationFrame(self.frame_request);
-        // Catch up on a scoreboard update the playback loop may have deferred
+        // Catch up on updates the playback loop may have deferred
         self.apply_time(self.get_time(self.position));
+        if (self.overview_stale) {
+            self.update_overview();
+        }
         self.update_ui();
     };
 
@@ -505,10 +530,10 @@ export default new function () {
         self.slider_el.css("--Timeline_fill",
                            "calc(7px + " + self.position + " * (100% - 14px))");
 
-        $("#Timeline_play").toggleClass("playing", self.playing)
+        self.play_el.toggleClass("playing", self.playing)
             .attr("title", self.playing ? "Pause (Space/K)" : "Play (Space/K)");
-        $("#Timeline_speed").text(SPEEDS[self.speed_idx] + "\u00D7");
-        $("#Timeline_label").text(self.format_position());
+        self.speed_el.text(SPEEDS[self.speed_idx] + "\u00D7");
+        self.label_el.text(self.format_position());
     };
 
     self.format_position = function () {

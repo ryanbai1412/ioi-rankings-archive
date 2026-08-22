@@ -460,9 +460,14 @@ export default new function () {
         return list.filter(u => u[sort_key] > user[sort_key]).length + 1;
     }
 
-    // Get what the rank should look like for the given user
-    self.format_rank = function (user) {
-        const global_rank = user.rank, local_rank = self.get_local_rank(user);
+    // Get what the rank should look like for the given user. The local rank
+    // can be passed in when it's already known (batch updates compute all of
+    // them at once, which is much cheaper than one get_local_rank per user).
+    self.format_rank = function (user, local_rank) {
+        const global_rank = user.rank;
+        if (local_rank === undefined) {
+            local_rank = self.get_local_rank(user);
+        }
 
         if (global_rank === local_rank) {
             return global_rank.toString();
@@ -472,18 +477,34 @@ export default new function () {
     }
 
     self.update_ranks = function () {
+        var local_ranks = self.get_local_ranks();
         for (const user of self.user_list) {
-            self.update_rank(user);
+            // Filtered-out rows are hidden, so their cells can wait until
+            // the filter is turned off
+            if (local_ranks[user["key"]] !== undefined) {
+                self.update_rank(user, local_ranks[user["key"]]);
+            }
         }
     }
 
     // Update the rank cell for the given user. Only the label span is
     // rewritten: the cell also hosts the transient rank-delta badge, which
-    // a .text() on the cell itself would destroy.
-    self.update_rank = function (user) {
+    // a .text() on the cell itself would destroy. The last written text and
+    // class are cached on the user so unchanged cells aren't touched at all
+    // (this runs for every user on every replay tick of the timeline).
+    self.update_rank = function (user, local_rank) {
+        var text = self.format_rank(user, local_rank);
+        var cls = "rank medal-" + Config.get_medal(user["rank"]);
+
+        if (user["rank_cell_text"] === text && user["rank_cell_class"] === cls) {
+            return;
+        }
+        user["rank_cell_text"] = text;
+        user["rank_cell_class"] = cls;
+
         var $rank = $(user.row).children("td.rank");
-        $rank.attr("class", "rank medal-" + Config.get_medal(user["rank"]));
-        $rank.children(".rank_label").text(self.format_rank(user));
+        $rank.attr("class", cls);
+        $rank.children(".rank_label").text(text);
     }
 
     // Rewrite all the score cells of the given user
@@ -517,6 +538,9 @@ export default new function () {
 
         list.sort(self.compare_users);
 
+        // All the local ranks in one sweep, rather than one O(n) scan each
+        var local_ranks = self.get_local_ranks();
+
         // Only move the rows that are out of place: re-inserting a row
         // restarts its CSS animations, so rows that didn't move must not be
         // touched (and this is much cheaper during playback, too)
@@ -526,7 +550,11 @@ export default new function () {
             if (tbody.children[idx] !== user["row"]) {
                 tbody.insertBefore(user["row"], tbody.children[idx] || null);
             }
-            self.update_rank(user);
+            // Filtered-out rows are hidden: their rank cells are refreshed
+            // by update_ranks when the filter is turned off
+            if (local_ranks[user["key"]] !== undefined) {
+                self.update_rank(user, local_ranks[user["key"]]);
+            }
         }
     };
 
@@ -627,9 +655,8 @@ export default new function () {
 
     // This callback is called by the DataStore when a user changes rank.
     self.rank_handler = function (u_id, user) {
-        var $row = $(user["row"]);
-
-        $row.children("td.rank").children(".rank_label").text(self.format_rank(user));
+        user["rank_cell_text"] = self.format_rank(user);
+        $(user["row"]).children("td.rank").children(".rank_label").text(user["rank_cell_text"]);
     };
 
 

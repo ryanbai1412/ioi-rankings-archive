@@ -32,6 +32,8 @@ export default new function () {
     var self = this;
 
     self.user_id = null;
+    // Whether the followed user was already highlighted before we followed them
+    self.was_selected = false;
     self.locked = false;
     self.menu_open = false;
 
@@ -290,14 +292,17 @@ export default new function () {
     ////// Following
 
     self.set_user = function (u_id) {
-        // Move the highlight from the old followed user to the new one
-        if (self.user_id !== null && DataStore.users[self.user_id]) {
+        // Move the highlight from the old followed user to the new one, but
+        // don't clear a highlight the user had set themselves before following
+        if (self.user_id !== null && DataStore.users[self.user_id] &&
+            !self.was_selected) {
             DataStore.set_selected(self.user_id, false);
         }
 
         self.user_id = u_id;
 
         if (u_id !== null) {
+            self.was_selected = DataStore.get_selected(u_id) != 0;
             DataStore.set_selected(u_id, true);
             self.locked = true;
             self.recenter();
