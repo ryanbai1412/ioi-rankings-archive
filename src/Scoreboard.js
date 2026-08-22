@@ -84,7 +84,7 @@ export default new function () {
         self.thead_el.html(self.make_head());
 
         // Create callbacks for sorting
-        self.thead_el.on("click", "th.score", function () {
+        self.thead_el.on("click", "th.score, th.user_id, th.team", function () {
             $("col[data-sort_key=" + self.sort_key + "]", self.tcols_el).removeClass("sort_key");
             $("tr td[data-sort_key=" + self.sort_key + "]", self.thead_el).removeClass("sort_key");
             $("tr td[data-sort_key=" + self.sort_key + "]", self.tbody_el).removeClass("sort_key");
@@ -97,6 +97,10 @@ export default new function () {
                 self.sort_key = "c_" + $this.data("contest");
             } else if ($this.hasClass("task")) {
                 self.sort_key = "t_" + $this.data("task");
+            } else if ($this.hasClass("user_id") || $this.hasClass("team")) {
+                // IDs start with the team code, so sorting by ID and by team
+                // are the same ordering; both headers share one sort key
+                self.sort_key = "user_id";
             }
 
             // The new order takes effect with the rows sliding into their
@@ -195,8 +199,8 @@ export default new function () {
 <col class=\"rank\"/> \
 <col class=\"name\"/> <col/><col/><col/><col/><col/><col/><col/><col/><col/> \
 <col/> <col/><col/><col/><col/><col/><col/><col/><col/><col/> \
-<col class=\"user_id\"/> \
-<col class=\"team\"/>";
+<col class=\"user_id\" data-sort_key=\"user_id\"/> \
+<col class=\"team\" data-sort_key=\"user_id\"/>";
 
         var contests = DataStore.contest_list;
         for (var i in contests) {
@@ -231,8 +235,8 @@ export default new function () {
     <th class=\"rank\">Rank</th> \
     <th colspan=\"10\" class=\"f_name\">First Name</th> \
     <th colspan=\"10\" class=\"l_name\">Last Name</th> \
-    <th class=\"user_id\">ID</th> \
-    <th class=\"team\">Team</th>";
+    <th class=\"user_id\" data-sort_key=\"user_id\">ID</th> \
+    <th class=\"team\" data-sort_key=\"user_id\">Team</th>";
 
         var contests = DataStore.contest_list;
         for (var i in contests) {
@@ -369,18 +373,18 @@ export default new function () {
     <td class=\"sel\"></td> \
     <td class=\"rank medal-" + Config.get_medal(user["rank"]) + "\"><span class=\"rank_label\">" + self.format_rank(user) + "</span></td> \
     " + self.make_name_cell(user) + " \
-    <td class=\"user_id\">" + user["display_key"] + "</td>";
+    <td class=\"user_id\" data-sort_key=\"user_id\">" + user["display_key"] + "</td>";
 
         if (user['team']) {
             if (DataStore.asset_config && DataStore.asset_config["noflags"])
                 result += " \
-            <td class=\"team\">" + user["team"] + "</td>";
+            <td class=\"team\" data-sort_key=\"user_id\">" + user["team"] + "</td>";
             else
                 result += " \
-    <td class=\"team\"><img src=\"" + Config.get_flag_url(user["team"]) + "\" title=\"" + DataStore.teams[user["team"]]["name"] + "\" /></td>";
+    <td class=\"team\" data-sort_key=\"user_id\"><img src=\"" + Config.get_flag_url(user["team"]) + "\" title=\"" + DataStore.teams[user["team"]]["name"] + "\" /></td>";
         } else {
             result += " \
-    <td class=\"team\"></td>";
+    <td class=\"team\" data-sort_key=\"user_id\"></td>";
         }
 
         var contests = DataStore.contest_list;
@@ -434,10 +438,23 @@ export default new function () {
     self.user_list = new Array();
 
 
+    // Numeric-aware comparison for the ID sort, so that e.g. "AZE2" comes
+    // before "AZE10"
+    self.id_collator = new Intl.Collator("en", {"numeric": true});
+
     // Compare two users. Returns -1 if "a < b" or +1 if "a >= b"
     // (where a < b means that a shoud go above b in the scoreboard)
     self.compare_users = function (a, b) {
         var sort_key = self.sort_key;
+        // The ID sort is alphabetical and ascending, unlike the score sorts;
+        // IDs start with the team code, so this also groups rows by team
+        if (sort_key === "user_id") {
+            var cmp = self.id_collator.compare(a["display_key"], b["display_key"]);
+            if (cmp !== 0) {
+                return cmp < 0 ? -1 : +1;
+            }
+            return a["key"] <= b["key"] ? -1 : +1;
+        }
         if ((a[sort_key] > b[sort_key]) || ((a[sort_key] == b[sort_key]) &&
            ((a["global"] > b["global"]) || ((a["global"] == b["global"]) &&
            ((a["l_name"] < b["l_name"]) || ((a["l_name"] == b["l_name"]) &&
@@ -507,7 +524,9 @@ export default new function () {
     // all users at once, keyed by user id. The timeline snapshots this
     // before and after a playback batch to compute rank deltas.
     self.get_local_ranks = function () {
-        const sort_key = self.sort_key;
+        // A rank by ID would be meaningless, so the ID sort keeps showing
+        // (and, during playback, badging) the global-score ranks
+        const sort_key = self.sort_key === "user_id" ? "global" : self.sort_key;
         const sorted = self.visible_users().slice()
             .sort((a, b) => b[sort_key] - a[sort_key]);
 
@@ -524,7 +543,9 @@ export default new function () {
 
     // Get the rank for the current scoreboard order
     self.get_local_rank = function (user) {
-        const sort_key = self.sort_key;
+        // Same fallback as get_local_ranks: rank by global score when
+        // sorted by ID
+        const sort_key = self.sort_key === "user_id" ? "global" : self.sort_key;
         return self.visible_users()
             .filter(u => u[sort_key] > user[sort_key]).length + 1;
     }

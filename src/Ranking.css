@@ -1140,7 +1140,9 @@ html.global_ranks #Scoreboard_cols col.rank {
     background-position: center;
 }
 
-#Scoreboard_head tr th.score {
+#Scoreboard_head tr th.score,
+#Scoreboard_head tr th.user_id,
+#Scoreboard_head tr th.team {
     cursor: pointer;
 }
 
@@ -1536,7 +1538,6 @@ html.global_ranks #Scoreboard_cols col.rank {
     border: 1px solid #777777;
     box-shadow: 0 0 1px white inset;
 }
-
 #Scoreboard_body tr:hover td.score,
 #Scoreboard_body tr.selected td.score,
 #Scoreboard_body tr td.score.sort_key {
