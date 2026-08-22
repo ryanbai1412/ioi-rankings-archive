@@ -34,6 +34,9 @@ const ARROW_STEP = 15 * 60;
 // How far J and L jump, in contest seconds
 const JUMP_STEP = 60 * 60;
 
+// No flash/badge effects when the viewport shows more rows than this
+const MAX_EFFECT_ROWS = 50;
+
 // Inline SVG control icons: Unicode glyphs like U+23EE render differently
 // per font, and mobile platforms show them as color emoji
 const ICONS = {
@@ -260,19 +263,24 @@ export default new function () {
         var first_score = new Object();
         var last_score = new Object();
 
+        // Read the viewport now, while the layout is still clean: doing it
+        // after the writes below would force a synchronous reflow
+        var range = Scoreboard.visible_range();
+
         // Flashes and badges can't be read at high playback speeds, so they
-        // switch off there; rows only slide on discrete jumps (paused
-        // scrubs, steps, seeks), where a single reorder can be followed
-        var effects = !self.playing || SPEEDS[self.speed_idx] <= 4;
-        var slide = effects && !self.playing;
+        // switch off there; they also switch off when the viewport shows a
+        // huge number of rows at once (a phone with the page zoomed out to
+        // fit), where animating them all is too expensive to be smooth;
+        // rows only slide on discrete jumps (steps, seeks, released scrubs),
+        // where a single reorder can be followed
+        var effects = (!self.playing || SPEEDS[self.speed_idx] <= 4) &&
+                      Scoreboard.visible_row_count(range) <= MAX_EFFECT_ROWS;
+        var slide = effects && !self.playing && !self.scrubbing;
 
         // Ranks in the currently displayed sorting, snapshotted before the
         // events mutate any scores, so the rank-delta badges reflect the
         // active column rather than always the global standings
         var old_ranks = effects ? Scoreboard.get_local_ranks() : null;
-        // Read the viewport now, while the layout is still clean: doing it
-        // after the writes below would force a synchronous reflow
-        var range = effects ? Scoreboard.visible_range() : null;
 
         while (self.applied < self.events.length &&
                self.events[self.applied]["time"] <= time) {

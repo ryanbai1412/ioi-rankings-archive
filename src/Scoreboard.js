@@ -776,6 +776,13 @@ export default new function () {
         };
     };
 
+    self.visible_row_count = function (range) {
+        if (self.geometry["row_height"] == 0) {
+            return 0;
+        }
+        return (range["bottom"] - range["top"]) / self.geometry["row_height"];
+    };
+
     self.is_row_visible = function (user, range) {
         // With a filter active the indexes don't map to positions (hidden
         // rows still hold an index), so fall back to reading the layout
