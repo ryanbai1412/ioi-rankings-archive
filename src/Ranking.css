@@ -1327,15 +1327,17 @@ abbr {
 
 /* Sits in the gutter to the left of the row: anchored to the rank cell,
    pushed past the 2em sel column (the sel cell itself is opacity: 0, so the
-   badge cannot live inside it). The fade in/out is a Web Animations API
-   animation (see Scoreboard.js) */
+   badge cannot live inside it) */
 .rank_delta {
+    /* Every row carries one, permanently; Scoreboard.show_rank_delta
+       reveals it (inline opacity, transition or animation per the
+       badge_style setting) */
+    opacity: 0;
     position: absolute;
-    top: 50%;
+    top: calc(50% - 0.6em);
     /* Past the sel column, which is 2em wide at the table's font size; the
        division undoes this element's 0.75em font-size scaling */
     right: calc(100% + 2em / 0.75 + 5px);
-    transform: translateY(-50%);
     font-size: 0.75em;
     line-height: 1.2em;
     font-weight: bold;

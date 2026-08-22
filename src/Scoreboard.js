@@ -312,7 +312,7 @@ export default new function () {
         var result = " \
 <tr class=\"user" + (user["selected"] > 0 ? " selected color" + user["selected"] : "") + (self.is_filtered_out(user) ? " filtered_out" : "") + "\" data-user=\"" + user["key"] + "\"> \
     <td class=\"sel\"></td> \
-    <td class=\"rank medal-" + Config.get_medal(user["rank"]) + "\"><span class=\"rank_label\">" + self.format_rank(user) + "</span></td> \
+    <td class=\"rank medal-" + Config.get_medal(user["rank"]) + "\"><span class=\"rank_label\">" + self.format_rank(user) + "</span><span class=\"rank_delta\"></span></td> \
     <td colspan=\"10\" class=\"f_name\">" + escapeHTML(user["f_name"]) + "</td> \
     <td colspan=\"10\" class=\"l_name\">" + escapeHTML(user["l_name"]) + "</td> \
     <td class=\"user_id\">" + user["display_key"] + "</td>";
@@ -832,45 +832,79 @@ export default new function () {
         }
     };
 
-    // Show a fading "climbed/dropped n places" badge in the gutter left of
-    // the row. It anchors to the rank cell — not the sel cell, whose
-    // opacity:0 would make it invisible — and the CSS offsets it past the
-    // sel column into the gutter. If a badge is already showing, fold the
-    // new movement into it in place (its animation must not restart, or
-    // rapid rank changes flash constantly).
+    // Show a "climbed/dropped n places" badge in the gutter left of the row.
+    // Each row carries a permanent, normally-invisible badge span (created in
+    // make_row): only its text/class/opacity are touched here — inserting
+    // and removing badge elements on every replay tick invalidates the row's
+    // layout. The "badge_style" setting picks how it appears: "static"
+    // (plain show/hide, fastest — any animation running on an element inside
+    // the table makes WebKit redo style/animation work every frame),
+    // "fade" (short CSS opacity transition) or "waapi" (the full fade
+    // in/out animation). If a badge is already showing, fold the new
+    // movement into it in place (its hide timer must not restart, or rapid
+    // rank changes keep it alive forever).
+    self.hide_rank_delta = function (user) {
+        user["delta_badge"].style.opacity = "";
+        user["delta_timer"] = undefined;
+        user["delta_anim"] = undefined;
+    };
+
     self.show_rank_delta = function (user, old_rank, new_rank) {
-        var $anchor = $(user["row"]).children("td.rank");
-        var $badge = $anchor.children(".rank_delta");
-
-        var from = $badge.length > 0 ? $badge.data("from") : old_rank;
-        var delta = from - new_rank;
-
-        if (delta == 0) {
-            $badge.remove();
+        var badge = user["delta_badge"];
+        if (badge === undefined || badge.parentNode === null ||
+            badge.parentNode.parentNode !== user["row"]) {
+            // Cached from the row, and refreshed whenever the row is rebuilt
+            badge = $(user["row"]).children("td.rank").children(".rank_delta")[0];
+            user["delta_badge"] = badge;
+        }
+        if (badge === undefined) {
             return;
         }
 
-        if ($badge.length == 0) {
-            $badge = $("<span></span>").appendTo($anchor).data("from", from);
+        var active = user["delta_timer"] !== undefined;
+        var from = active ? user["delta_from"] : old_rank;
+        var delta = from - new_rank;
 
-            // Animate via the Web Animations API rather than CSS: the row is
-            // re-inserted whenever it moves in the standings, which restarts
-            // CSS animations (leaving the badge stuck alive), while WAAPI
-            // animations survive DOM moves and reliably finish
-            var animation = $badge[0].animate([
-                {"opacity": 0, "transform": "translateY(calc(-50% + 2px))"},
-                {"opacity": 1, "transform": "translateY(-50%)", "offset": 0.15},
-                {"opacity": 1, "transform": "translateY(-50%)", "offset": 0.7},
-                {"opacity": 0, "transform": "translateY(calc(-50% - 3px))"}
-            ], {"duration": 2000, "easing": "ease-out", "fill": "forwards"});
-
-            animation.onfinish = function () {
-                $badge.remove();
-            };
+        if (delta == 0) {
+            if (active) {
+                clearTimeout(user["delta_timer"]);
+                if (user["delta_anim"] !== undefined) {
+                    user["delta_anim"].cancel();
+                }
+                self.hide_rank_delta(user);
+            }
+            return;
         }
 
-        $badge.attr("class", "rank_delta " + (delta > 0 ? "up" : "down"))
-            .text((delta > 0 ? "\u25B2" : "\u25BC") + Math.abs(delta));
+        if (!active) {
+            var style = Settings.get_choice("badge_style", "static");
+            user["delta_from"] = from;
+            user["delta_timer"] = window.setTimeout(function () {
+                self.hide_rank_delta(user);
+            }, 2000);
+
+            if (style == "waapi") {
+                // The badge is opacity: 0 at rest, so it disappears when the
+                // animation ends. WAAPI rather than CSS animations: the row
+                // is re-inserted whenever it moves in the standings, which
+                // restarts CSS animations (leaving the badge stuck alive),
+                // while WAAPI animations survive DOM moves.
+                badge.style.transition = "";
+                user["delta_anim"] = badge.animate([
+                    {"opacity": 0, "transform": "translateY(2px)"},
+                    {"opacity": 1, "transform": "translateY(0)", "offset": 0.15},
+                    {"opacity": 1, "transform": "translateY(0)", "offset": 0.7},
+                    {"opacity": 0, "transform": "translateY(-3px)"}
+                ], {"duration": 2000, "easing": "ease-out"});
+            } else {
+                badge.style.transition =
+                    style == "fade" ? "opacity 0.3s ease-out" : "";
+                badge.style.opacity = "1";
+            }
+        }
+
+        badge.className = "rank_delta " + (delta > 0 ? "up" : "down");
+        badge.textContent = (delta > 0 ? "\u25B2" : "\u25BC") + Math.abs(delta);
     };
 
     // Record every row's vertical position; pass the result to animate_sort
