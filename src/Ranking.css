@@ -123,10 +123,14 @@ abbr {
     user-select: none;
 }
 
+/* The whole track band is the scrub target (see Timeline.js), so touches
+   must not scroll the page and presses anywhere on it move the thumb */
 #Timeline_track {
     position: relative;
     flex: 1 1 auto;
     height: 100%;
+    touch-action: none;
+    cursor: pointer;
 }
 
 #Timeline_slider {
@@ -143,7 +147,8 @@ abbr {
     -webkit-appearance: none;
     -moz-appearance: none;
     appearance: none;
-    cursor: pointer;
+    /* Purely visual: the track handles the pointer */
+    pointer-events: none;
     outline: none;
 }
 

@@ -55,6 +55,8 @@ export default new function () {
 
     self.speed_idx = 0;
     self.playing = false;
+    // Whether a pointer is currently dragging on the track
+    self.scrubbing = false;
     // Set while scrubbing mid-playback, to resume once the thumb is released
     self.resume_after_scrub = false;
     // Set when playback skipped an overview redraw, to catch up on pause
@@ -77,20 +79,43 @@ export default new function () {
         self.speed_el = $("#Timeline_speed");
         self.label_el = $("#Timeline_label");
 
-        self.slider_el.on("input", function () {
-            // Read the value before pausing: pause() refreshes the UI, which
-            // would reset the slider to the old position
-            var position = self.snap(parseInt($(this).val(), 10) / SLIDER_STEPS);
+        // Scrubbing is driven by pointer events on the whole track, not by
+        // the (pointer-events: none) slider itself: this way the hit target
+        // is the full-height timeline band, a press anywhere jumps the thumb
+        // there, and dragging behaves the same on touch and mouse (native
+        // range inputs on mobile only react to touches on the thumb itself)
+        var track = $("#Timeline_track")[0];
+
+        track.addEventListener("pointerdown", function (event) {
+            if (!event.isPrimary) {
+                return;
+            }
+            track.setPointerCapture(event.pointerId);
+
             // Hold playback while scrubbing, but remember to resume
             if (self.playing) {
                 self.pause();
                 self.resume_after_scrub = true;
             }
-            self.set_position(position);
+
+            self.scrubbing = true;
+            self.last_scrub_apply = 0;
+            self.scrub_to(event.clientX, false);
         });
 
-        self.slider_el.on("change", function () {
-            self.set_position(self.snap(parseInt($(this).val(), 10) / SLIDER_STEPS));
+        track.addEventListener("pointermove", function (event) {
+            if (self.scrubbing && event.isPrimary) {
+                self.scrub_to(event.clientX, false);
+            }
+        });
+
+        var end_scrub = function (event) {
+            if (!self.scrubbing || !event.isPrimary) {
+                return;
+            }
+            self.scrubbing = false;
+            self.scrub_to(event.clientX, true);
+
             if (self.resume_after_scrub) {
                 self.resume_after_scrub = false;
                 // Don't restart from the beginning if dragged to the very end
@@ -98,7 +123,10 @@ export default new function () {
                     self.play();
                 }
             }
-        });
+        };
+
+        track.addEventListener("pointerup", end_scrub);
+        track.addEventListener("pointercancel", end_scrub);
 
         $("#Timeline_ticks").on("click", ".Timeline_tick", function () {
             self.set_position(parseFloat($(this).attr("data-position")));
@@ -372,6 +400,29 @@ export default new function () {
 
 
     ////// Playback
+
+    // Move to where the pointer is. While the drag is in progress the
+    // scoreboard update is throttled like during playback, since a touch
+    // drag can emit far more moves than slower devices can keep up with;
+    // the final position (finish == true) is always applied.
+    self.scrub_to = function (client_x, finish) {
+        var rect = self.slider_el[0].getBoundingClientRect();
+        // The thumb (14px wide) travels over the track minus its own width
+        var travel = rect.width - 14;
+        if (travel <= 0) {
+            return;
+        }
+
+        var position = self.snap((client_x - rect.left - 7) / travel);
+
+        var now = performance.now();
+        var skip = !finish && now - self.last_scrub_apply < MIN_FRAME_INTERVAL;
+        if (!skip) {
+            self.last_scrub_apply = now;
+        }
+
+        self.set_position(position, skip);
+    };
 
     // Pull a scrubbed position onto a stop if it lands close enough to one
     self.snap = function (position) {
