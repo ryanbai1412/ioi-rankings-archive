@@ -695,6 +695,9 @@ abbr {
     box-sizing: content-box;
     top: 0;
     left: 256px;
+    /* Explicit, as the default width of search inputs varies per browser
+       and the filter pill sits at a fixed offset right of this */
+    width: 140px;
     height: 1.5em;
     margin: 0.5em;
     border: 0;
