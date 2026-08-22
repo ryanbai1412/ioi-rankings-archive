@@ -300,11 +300,17 @@ abbr {
 }
 
 #Follow_eye {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     width: 2.2em;
     height: 1.8em;
     border: 1px solid #1745ff;
     border-radius: 4px;
     padding: 0;
+    /* Buttons don't inherit the font, and mobile WebKit's default button
+       font-size is smaller, which shrinks the em-based dimensions */
+    font: inherit;
     color: #1745ff;
     background-color: #FFFFFF;
     cursor: pointer;
