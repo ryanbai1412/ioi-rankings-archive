@@ -82,16 +82,21 @@ abbr {
 
 #InnerFrame {
     position: absolute;
-    /* The timeline ends at 3em + 55px; with the 2px top margin below this
-       leaves the same 7px gap as above the timeline. The timeline grows by
-       --Debug_height when the debug line is shown (see below). */
+    /* The timeline ends at 3em + 55px. The top margin holds the whole gap
+       between the timeline and the table: the table itself has no top
+       margin, so its sticky header sits at the top of the scrollport and
+       sticks with no travel. The timeline grows by --Debug_height when the
+       debug line is shown (see below). */
     top: calc(3em + 60px + var(--Debug_height, 0px));
     left: 220px;
     right: 0;
     bottom: 0;
-    margin: 2px 0 0 2px;
+    margin: 8px 0 0 2px;
     padding: 0 3em;
     overflow-y: scroll;
+    /* No rubber-band bounce: it would drag the stuck header along with the
+       content when overscrolling past the top */
+    overscroll-behavior-y: none;
 }
 
 
@@ -315,6 +320,63 @@ html.debug_info {
 
 #Timeline_play.playing .icon_pause {
     display: block;
+}
+
+/* The playback speed dropdown: the button shows the current speed, the
+   menu (anchored below it) lists all of them */
+#Timeline_speed_box {
+    position: relative;
+    display: inline-flex;
+}
+
+#Timeline_speed_box.open #Timeline_speed {
+    color: #FFFFFF;
+    background-color: #1745ff;
+}
+
+#Timeline_speed_menu {
+    display: none;
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    min-width: 100%;
+    padding: 0.25em 0;
+    border: 1px solid #E2E2E6;
+    border-radius: 6px;
+    background-color: #FFFFFF;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+    z-index: 50;
+}
+
+#Timeline_speed_box.open #Timeline_speed_menu {
+    display: block;
+}
+
+/* Undo the generic control-button styling for the menu entries */
+#Timeline_controls .Timeline_speed_option {
+    display: block;
+    width: 100%;
+    height: auto;
+    margin: 0;
+    border: none;
+    border-radius: 0;
+    padding: 0.25em 1em;
+    color: #333333;
+    background-color: #FFFFFF;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+#Timeline_controls .Timeline_speed_option.selected {
+    color: #1745ff;
+    font-weight: bold;
+    background-color: #F2F5FF;
+}
+
+/* After the selected rule, so hovering it still darkens the highlight */
+#Timeline_controls .Timeline_speed_option:hover {
+    color: #1745ff;
+    background-color: #E8EDFF;
 }
 
 #Follow {
@@ -948,24 +1010,30 @@ html.debug_info {
 |                                   ----------                                 |
 \******************************************************************************/
 
-/* These are the colors at stats.ioinformatics.org */
-.medal-gold {
+/* These are the colors at stats.ioinformatics.org; they only apply while
+   the "Medal colors" setting is on (Scoreboard mirrors it on <html>) */
+html.medal_colors .medal-gold {
     background-color: #FFEE55;
 }
-.medal-silver {
+html.medal_colors .medal-silver {
     background-color: #CCCCCC;
 }
-.medal-bronze {
+html.medal_colors .medal-bronze {
     background-color: #B87838;
 }
-.medal-hm {
+html.medal_colors .medal-hm {
     background-color: #B197FA;
 }
 
 #Scoreboard {
     width: 100%;
     table-layout: fixed;
-    margin: 10px 0 20px 0;
+    border-spacing: 2px;
+    /* The gap below the timeline lives on #InnerFrame instead of here, and
+       the negative top margin cancels the outer border-spacing above the
+       header row: the header's natural position then coincides exactly with
+       its stuck position, so it never travels at all */
+    margin: -2px 0 20px 0;
 }
 
 #Scoreboard_cols col.sel {
@@ -973,6 +1041,12 @@ html.debug_info {
 }
 
 #Scoreboard_cols col.rank {
+    width: 48px;
+}
+
+/* Wider, to fit the global rank in parentheses next to the local one
+   while that setting is enabled (Scoreboard mirrors it on <html>) */
+html.global_ranks #Scoreboard_cols col.rank {
     width: 80px;
 }
 
@@ -1002,11 +1076,20 @@ html.debug_info {
     background-color: #ECECEF;
     border: 1px #D0D0D2 solid;
     border-radius: 4px;
-    box-shadow: 0 0 2px 0 #D2D2D4 inset;
+    /* The second (outer, spread-only) shadow fills the border-spacing gaps
+       around the cells so rows don't show through them while the header is
+       stuck during scrolling */
+    box-shadow: 0 0 2px 0 #D2D2D4 inset, 0 0 0 2px #F6F6F6;
     height: 24px;
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
+    /* Keep the header visible while scrolling through the standings
+       (#InnerFrame is the scroll container) */
+    position: -webkit-sticky;
+    position: sticky;
+    top: 0;
+    z-index: 2;
 }
 
 #Scoreboard_body tr td.team {
@@ -1026,11 +1109,29 @@ html.debug_info {
 }
 
 #Scoreboard_body tr td.user_id,
-#Scoreboard_body tr td.f_name,
-#Scoreboard_body tr td.l_name {
+#Scoreboard_body tr td.name {
     text-align: left;
     padding: 0 0.5em;
     cursor: pointer;
+}
+
+/* The empty spacer between the first and the last name (a single cell
+   holds both as one run of inline text so that find-in-page can match a
+   full-name search; see make_name_cell in Scoreboard.js). Its width puts
+   the last name where the separate last-name cell's text used to start:
+   the former cell boundary sits at 50% of the content box plus the 0.5em
+   cell padding plus half of the 2px border-spacing, and the measured
+   width of "First " before the spacer (--fw) is subtracted from that.
+   Negative results clamp to zero, so overlong first names just push the
+   last name along instead of overlapping it. */
+#Scoreboard_body tr td.name .name_gap {
+    display: inline-block;
+    width: calc(50% + 0.5em + 1px - var(--fw, 0px));
+}
+
+/* Selecting a row bolds the name, which widens the first name */
+#Scoreboard_body tr.selected td.name .name_gap {
+    width: calc(50% + 0.5em + 1px - var(--fw_b, 0px));
 }
 
 #Scoreboard_head tr th.sel {
@@ -1044,16 +1145,14 @@ html.debug_info {
 }
 
 #Scoreboard_body tr:hover td.user_id,
-#Scoreboard_body tr:hover td.f_name,
-#Scoreboard_body tr:hover td.l_name,
+#Scoreboard_body tr:hover td.name,
 #Scoreboard_body tr:hover td.team {
     background-color: rgba(200,200,200,0.35);
     border-radius: 5px;
 }
 
 #Scoreboard_body tr.selected td.user_id,
-#Scoreboard_body tr.selected td.f_name,
-#Scoreboard_body tr.selected td.l_name {
+#Scoreboard_body tr.selected td.name {
     font-weight: bold;
 }
 
@@ -1492,6 +1591,130 @@ html.debug_info {
     background-color: hsl(120, 30%, 55%);
 }
 
+/* Percentile cells in the submission tables: same kind of lightness ramp as
+   the score cells, but blue to keep the two scales apart */
+.pct_0_10 {
+    background-color: hsl(210, 40%, 94%);
+}
+
+.pct_10_20 {
+    background-color: hsl(210, 40%, 92%);
+}
+
+.pct_20_30 {
+    background-color: hsl(210, 40%, 90%);
+}
+
+.pct_30_40 {
+    background-color: hsl(210, 40%, 88%);
+}
+
+.pct_40_50 {
+    background-color: hsl(210, 40%, 86%);
+}
+
+.pct_50_60 {
+    background-color: hsl(210, 40%, 84%);
+}
+
+.pct_60_70 {
+    background-color: hsl(210, 40%, 82%);
+}
+
+.pct_70_80 {
+    background-color: hsl(210, 40%, 80%);
+}
+
+.pct_80_90 {
+    background-color: hsl(210, 40%, 78%);
+}
+
+.pct_90_100 {
+    background-color: hsl(210, 40%, 74%);
+}
+
+/* The shared score ramp is a bit dark for the submission tables; soften it
+   there without touching the scoreboard cells */
+#UserDetail_submissions .score_0_10 {
+    background-color: hsl(120, 30%, 92%);
+}
+
+#UserDetail_submissions .score_10_20 {
+    background-color: hsl(120, 30%, 90%);
+}
+
+#UserDetail_submissions .score_20_30 {
+    background-color: hsl(120, 30%, 88%);
+}
+
+#UserDetail_submissions .score_30_40 {
+    background-color: hsl(120, 30%, 86%);
+}
+
+#UserDetail_submissions .score_40_50 {
+    background-color: hsl(120, 30%, 84%);
+}
+
+#UserDetail_submissions .score_50_60 {
+    background-color: hsl(120, 30%, 82%);
+}
+
+#UserDetail_submissions .score_60_70 {
+    background-color: hsl(120, 30%, 80%);
+}
+
+#UserDetail_submissions .score_70_80 {
+    background-color: hsl(120, 30%, 78%);
+}
+
+#UserDetail_submissions .score_80_90 {
+    background-color: hsl(120, 30%, 76%);
+}
+
+#UserDetail_submissions .score_90_100 {
+    background-color: hsl(120, 30%, 74%);
+}
+
+#UserDetail_submissions .score_100 {
+    background-color: hsl(120, 30%, 70%);
+}
+
+/* One background per problem in the submission tables (by 1-based task
+   index). Light tints of the Okabe-Ito colorblind-safe palette, ordered to
+   alternate warm/cool and light/dark so adjacent problems stay apart under
+   all common forms of color vision deficiency */
+.task_color_1 {
+    background-color: #F5D999; /* orange */
+}
+
+.task_color_2 {
+    background-color: #BBE1F6; /* sky blue */
+}
+
+.task_color_3 {
+    background-color: #F9F4B3; /* yellow */
+}
+
+.task_color_4 {
+    background-color: #EEBF99; /* vermillion */
+}
+
+.task_color_5 {
+    background-color: #99C7E0; /* blue */
+}
+
+.task_color_6 {
+    background-color: #EBC9DC; /* reddish purple */
+}
+
+.task_color_7 {
+    background-color: #99D8C7; /* bluish green */
+}
+
+.task_color_8 {
+    background-color: #D6D6D6; /* gray */
+}
+
 
 /******************************************************************************\
 |                                                                              |
@@ -1696,11 +1919,103 @@ html.debug_info {
 #UserDetail_charts {
     margin-top: 24px;
     width: 100%;
+    position: relative;
+}
+
+#UserDetail_chart_hover_line {
+    display: none;
+    position: absolute;
+    width: 0;
+    border-left: 1px dashed #888888;
+    pointer-events: none;
+    z-index: 5;
+}
+
+.UserDetail_chart_dot {
+    display: none;
+    position: absolute;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    /* soft halo in the series color to lift the dot off the line */
+    box-sizing: border-box;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    z-index: 6;
+}
+
+#UserDetail_chart_dot_score {
+    background-color: rgb(102, 102, 238);
+    box-shadow: 0 0 0 3px rgba(102, 102, 238, 0.3);
+}
+
+#UserDetail_chart_dot_rank {
+    background-color: rgb(210, 50, 50);
+    box-shadow: 0 0 0 3px rgba(210, 50, 50, 0.3);
+}
+
+#UserDetail_chart_tooltip {
+    display: none;
+    position: absolute;
+    background-color: rgba(255, 255, 255, 0.97);
+    border: 1px solid #999999;
+    border-radius: 4px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+    padding: 6px 10px;
+    font-size: 13px;
+    line-height: 1.5;
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 6;
+}
+
+#UserDetail_chart_tooltip_time {
+    font-weight: bold;
+    margin-bottom: 2px;
+}
+
+.UserDetail_chart_tooltip_row .label {
+    display: inline-block;
+    min-width: 52px;
+    color: #555555;
+}
+
+.UserDetail_chart_tooltip_row .label::before {
+    content: "";
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 5px;
+    vertical-align: 0;
+}
+
+.UserDetail_chart_tooltip_row .label.score::before {
+    background-color: rgb(102, 102, 238);
+}
+
+/* Per-problem score breakdown; only shown when there is one */
+#UserDetail_chart_tooltip_tasks_row {
+    display: none;
+}
+
+.UserDetail_chart_tooltip_row .label.distr::before {
+    background-color: #999999;
+}
+
+.UserDetail_chart_tooltip_row .label.rank::before {
+    background-color: rgb(210, 50, 50);
 }
 
 #UserDetail_submissions {
     margin-top: 24px;
     width: 100%;
+    /* Only ever kicks in for tables that were given a min-width because
+       they have too many subtask columns (see make_submission_table) */
+    overflow-x: auto;
+    /* No rubber-band bounce past the ends, and don't let the scroll
+       chain to the page behind the modal */
+    overscroll-behavior-x: none;
 }
 
 #UserDetail_submissions:empty {
@@ -1714,7 +2029,7 @@ html.debug_info {
 
 #UserDetail_submissions td {
     height: 22px;
-    padding-left: 4px;
+    text-align: center;
 }
 
 #UserDetail_submissions thead {
@@ -1732,6 +2047,60 @@ html.debug_info {
 #UserDetail_submissions tbody td[colspan] {
     text-align: center;
     font-style: italic;
+}
+
+/* Submission tables with too many subtask columns to fit are given a
+   min-width by make_submission_table (UserDetail.js), making the container
+   above scroll horizontally. The three meta columns (Time, Score,
+   Cumulative Score) stay pinned to the left while the subtask columns
+   scroll; their widths and left offsets below must stay consistent with
+   each other and with the 280px total used in UserDetail.js. */
+#UserDetail_submissions table.subtask_scroll {
+    /* The default 2px cell spacing would leave gaps between the pinned
+       cells for the scrolling content to show through */
+    border-spacing: 0;
+}
+
+#UserDetail_submissions table.subtask_scroll thead td:nth-child(1) {
+    width: 80px;
+}
+
+#UserDetail_submissions table.subtask_scroll thead td:nth-child(2) {
+    width: 80px;
+}
+
+#UserDetail_submissions table.subtask_scroll thead td:nth-child(3) {
+    width: 120px;
+}
+
+#UserDetail_submissions table.subtask_scroll td:nth-child(-n+3) {
+    position: sticky;
+    z-index: 1;
+}
+
+/* Kept at low (id-less) specificity so the score_* backgrounds still win;
+   this only provides an opaque fallback (the row stripe, set on the tr) so
+   the columns scrolling underneath don't show through the pinned cells */
+table.subtask_scroll td:nth-child(-n+3) {
+    background-color: inherit;
+}
+
+#UserDetail_submissions table.subtask_scroll thead td:nth-child(-n+3) {
+    background-color: #DDDDDD;
+}
+
+#UserDetail_submissions table.subtask_scroll td:nth-child(1) {
+    left: 0;
+}
+
+#UserDetail_submissions table.subtask_scroll td:nth-child(2) {
+    left: 80px;
+}
+
+#UserDetail_submissions table.subtask_scroll td:nth-child(3) {
+    left: 160px;
+    /* Marks the edge of the pinned pane */
+    border-right: 1px solid #BBBBBB;
 }
 
 

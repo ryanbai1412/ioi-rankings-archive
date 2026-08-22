@@ -18,6 +18,10 @@
 export default new function () {
     var self = this;
 
+    // the padding around the chart, exposed so that overlays (e.g. hover
+    // tooltips) can map between pixels and data coordinates
+    self.padding = {l: 22, r: 1, t: 6, b: 6};
+
     self.draw_chart = function (canvas, y_min, y_max, y_def, h_def, x_int, data, color, marks) {
         // canvas is the context
 /*
@@ -39,10 +43,10 @@ export default new function () {
         var hei = canvas.height;
 
         // the padding around the chart
-        var pad_l = 22;
-        var pad_r = 1;
-        var pad_t = 6;
-        var pad_b = 6;
+        var pad_l = self.padding.l;
+        var pad_r = self.padding.r;
+        var pad_t = self.padding.t;
+        var pad_b = self.padding.b;
 
         // the intervals of allowed x values
         var x_size = 0;

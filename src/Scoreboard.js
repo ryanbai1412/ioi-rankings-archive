@@ -59,9 +59,21 @@ export default new function () {
             self.reposition_overlay_badges();
         });
 
+        // The rank column is only wide enough for the "(global rank)"
+        // suffix while the setting is on, and the medal backgrounds on the
+        // rank cells only paint while theirs is (see Ranking.css)
+        $("html").toggleClass("global_ranks", Settings.get("global_ranks"));
+        $("html").toggleClass("medal_colors", Settings.get("medal_colors"));
+
         Settings.on_change(function (name) {
             if (name === "global_ranks") {
+                $("html").toggleClass("global_ranks", Settings.get("global_ranks"));
+                // The column width changed, so the cached geometry is stale
+                self.geometry = undefined;
+                self.reposition_overlay_badges();
                 self.update_ranks();
+            } else if (name === "medal_colors") {
+                $("html").toggleClass("medal_colors", Settings.get("medal_colors"));
             }
         });
     };
@@ -87,7 +99,10 @@ export default new function () {
                 self.sort_key = "t_" + $this.data("task");
             }
 
-            self.sort();
+            // The new order takes effect with the rows sliding into their
+            // new places (when the setting allows), at the slower sort
+            // pace since the whole board reshuffles at once
+            self.reorder_with_slides(self.sort, undefined, SORT_SLIDE_MS);
 
             $("col[data-sort_key=" + self.sort_key + "]", self.tcols_el).addClass("sort_key");
             $("tr td[data-sort_key=" + self.sort_key + "]", self.thead_el).addClass("sort_key");
@@ -114,7 +129,7 @@ export default new function () {
         self.update_filter_ui();
 
         // Create callbacks for UserPanel
-        self.tbody_el.on("click", "td.f_name, td.l_name, td.user_id", function () {
+        self.tbody_el.on("click", "td.name, td.user_id", function () {
             UserDetail.show($(this).parent().data("user"));
         });
 
@@ -131,10 +146,6 @@ export default new function () {
         // Cleanup for the playback effects (see the section further down)
         self.tbody_el.on("animationend", "td.score", function () {
             $(this).removeClass("cell_up cell_down");
-        });
-
-        self.tbody_el.on("transitionend", "tr", function () {
-            this.style.transition = "";
         });
     };
 
@@ -175,15 +186,15 @@ export default new function () {
         // global cells to 5, etc. This way, since all <col/>s with a width of
         // 'auto' get the same computed width, we keep the 3:4:5 ratio and are
         // able to scale well at each screen size, while keeping the constant
-        // width columns constant. (Note: we gave the first_ and last_name
-        // columns a "width" of 10 <col/> elements.)
+    // width columns constant. (Note: we gave the name column a "width" of
+    // 20 <col/> elements.)
         // Suggestion on other solution that get the same result and don't mess
         // this much with JS and HTML are extremely welcome!
         var result = " \
 <col class=\"sel\"/> \
 <col class=\"rank\"/> \
-<col class=\"f_name\"/> <col/><col/><col/><col/><col/><col/><col/><col/><col/> \
-<col class=\"l_name\"/> <col/><col/><col/><col/><col/><col/><col/><col/><col/> \
+<col class=\"name\"/> <col/><col/><col/><col/><col/><col/><col/><col/><col/> \
+<col/> <col/><col/><col/><col/><col/><col/><col/><col/><col/> \
 <col class=\"user_id\"/> \
 <col class=\"team\"/>";
 
@@ -269,18 +280,22 @@ export default new function () {
     };
 
     self.set_filtering = function (flag) {
-        self.filtering = flag;
+        // The surviving rows slide into their compacted (or restored)
+        // places; rows that hide or reappear do so in place
+        self.reorder_with_slides(function () {
+            self.filtering = flag;
 
-        for (const user of self.user_list) {
-            $(user["row"]).toggleClass("filtered_out", self.is_filtered_out(user));
-        }
+            for (const user of self.user_list) {
+                $(user["row"]).toggleClass("filtered_out", self.is_filtered_out(user));
+            }
 
-        // Hiding or showing rows changes every measurement in the cache
-        self.geometry = undefined;
+            // Hiding or showing rows changes every measurement in the cache
+            self.geometry = undefined;
 
-        self.update_ranks();
-        self.update_filter_ui();
-        self.reposition_overlay_badges();
+            self.update_ranks();
+            self.update_filter_ui();
+            self.reposition_overlay_badges();
+        });
     };
 
     self.selected_count = function () {
@@ -310,14 +325,50 @@ export default new function () {
     };
 
 
+    // The width of "First " in the scoreboard's font, measured with a
+    // canvas (no layout involved). The name spacer (see make_name_cell)
+    // subtracts it from the fixed last-name column offset.
+    self.first_name_width = function (f_name, weight) {
+        if (self.name_measure_ctx === undefined) {
+            self.name_measure_ctx =
+                document.createElement("canvas").getContext("2d");
+            var style = window.getComputedStyle(self.tbody_el[0]);
+            self.name_measure_font = style.fontSize + " " + style.fontFamily;
+        }
+        self.name_measure_ctx.font = weight + self.name_measure_font;
+        return self.name_measure_ctx.measureText(f_name + " ").width;
+    };
+
+    // The first and last name look like two aligned columns but live in
+    // one cell, as a single run of plain inline text, so that the
+    // browser's find-in-page can match a full "First Last" search:
+    // browsers never match text that spans two table cells (each cell is
+    // its own text block, and Chrome breaks matches even across
+    // inline-blocks that contain text). The two-column look comes from an
+    // empty inline-block spacer between the names — empty atomic inlines
+    // are the one thing that provably doesn't break the match — whose
+    // per-row width places the last name at the former column boundary.
+    // The measured width of "First " is handed to the stylesheet via the
+    // --fw custom property (--fw_b is the bold variant, for while the row
+    // is selected); see td.name .name_gap in Ranking.css for the rest of
+    // the math.
+    self.make_name_cell = function (user) {
+        return "<td colspan=\"20\" class=\"name\" style=\"--fw: " +
+               self.first_name_width(user["f_name"], "").toFixed(2) +
+               "px; --fw_b: " +
+               self.first_name_width(user["f_name"], "bold ").toFixed(2) +
+               "px\">" + escapeHTML(user["f_name"]) +
+               "<span class=\"name_gap\"></span> " +
+               escapeHTML(user["l_name"]) + "</td>";
+    };
+
     self.make_row = function (user) {
         // See the comment in .make_cols() for the reason we use colspans.
         var result = " \
 <tr class=\"user" + (user["selected"] > 0 ? " selected color" + user["selected"] : "") + (self.is_filtered_out(user) ? " filtered_out" : "") + "\" data-user=\"" + user["key"] + "\"> \
     <td class=\"sel\"></td> \
     <td class=\"rank medal-" + Config.get_medal(user["rank"]) + "\"><span class=\"rank_label\">" + self.format_rank(user) + "</span></td> \
-    <td colspan=\"10\" class=\"f_name\">" + escapeHTML(user["f_name"]) + "</td> \
-    <td colspan=\"10\" class=\"l_name\">" + escapeHTML(user["l_name"]) + "</td> \
+    " + self.make_name_cell(user) + " \
     <td class=\"user_id\">" + user["display_key"] + "</td>";
 
         if (user['team']) {
@@ -647,8 +698,7 @@ export default new function () {
         delete old_user["row"];
         delete old_user["index"];
 
-        $row.children("td.f_name").text(user["f_name"]);
-        $row.children("td.l_name").text(user["l_name"]);
+        $row.children("td.name").replaceWith(self.make_name_cell(user));
 
         if (user["team"]) {
             $row.children(".team").html("<img src=\"" + Config.get_flag_url(user["team"]) + "\" title=\"" + DataStore.teams[user["team"]]["name"] + "\" />");
@@ -796,6 +846,10 @@ export default new function () {
             "frame_height": frame.clientHeight,
             "frame_top": frame_rect.top,
             "frame_bottom": frame_rect.bottom,
+            // Where the sticky header's bottom edge sits once it is stuck
+            // to the top of the frame: rows above it are hidden behind it
+            "header_bottom": frame_rect.top +
+                             self.thead_el[0].getBoundingClientRect().height,
             "gutter_right": sel_rect.left - 5
         };
     };
@@ -899,8 +953,9 @@ export default new function () {
     };
 
     // Place a badge at its row's current position on screen, hiding it when
-    // the row is scrolled out of the scoreboard frame. Positions come from
-    // the cached row geometry, never from a layout read.
+    // the row is scrolled out of the scoreboard frame (or behind the sticky
+    // header). Positions come from the cached row geometry, never from a
+    // layout read.
     self.place_overlay_badge = function (entry) {
         if (self.geometry === undefined) {
             self.measure_geometry();
@@ -911,7 +966,7 @@ export default new function () {
                   geometry["frame"].scrollTop +
                   geometry["row_height"] / 2;
         var visible = !self.is_filtered_out(entry["user"]) &&
-                      top > geometry["frame_top"] &&
+                      top > geometry["header_bottom"] &&
                       top < geometry["frame_bottom"];
 
         // The badge's right edge sits at the gutter, vertically centered
@@ -1031,48 +1086,214 @@ export default new function () {
     self.measure_rows = function () {
         var result = new Object();
         for (const user of self.user_list) {
+            // A hidden row reads offsetTop 0, not a position to slide from
+            if (self.is_filtered_out(user)) {
+                continue;
+            }
             result[user["key"]] = user["row"].offsetTop;
         }
         return result;
     };
 
-    self.animate_sort = function (before) {
+    // The sorted index of every row, for animate_playback_sort: the cheap
+    // stand-in for measure_rows during playback, where index * row height
+    // gives the position without any layout read
+    self.snapshot_indices = function () {
+        var result = new Object();
+        for (const user of self.user_list) {
+            result[user["key"]] = user["index"];
+        }
+        return result;
+    };
+
+    // How long a row takes to slide into its new place
+    const SLIDE_MS = 250;
+
+    // Changing the sort column reshuffles the whole board at once, which
+    // is easier to follow at half speed
+    const SORT_SLIDE_MS = 2 * SLIDE_MS;
+
+    // Slide a row into its place from delta pixels away (FLIP). If an
+    // earlier slide is still in flight, the row continues from where it
+    // visually is: a mid-animation retarget (say 200 -> 10 becoming -> 75
+    // when the row is passing 50) reads 200 -> 50 -> 75, never snapping.
+    // Driven with the Web Animations API: the sort's insertBefore would
+    // kill a CSS transition on a moved row, while a live WAAPI animation
+    // survives the move and can be sampled for the in-flight offset.
+    self.slide_row = function (user, delta, duration) {
+        if (duration === undefined) {
+            duration = SLIDE_MS;
+        }
+        if (self.reduced_motion === undefined) {
+            self.reduced_motion =
+                window.matchMedia("(prefers-reduced-motion: reduce)");
+        }
+        if (self.reduced_motion.matches) {
+            return;
+        }
+
+        var row = user["row"];
+        var slide = user["slide"];
+        if (slide !== undefined && slide.playState === "running") {
+            // Where the interrupted slide visually left the row: the
+            // computed transform is the animation's current frame
+            var transform = window.getComputedStyle(row).transform;
+            var matrix = transform.match(/matrix\(([^)]+)\)/);
+            if (matrix !== null) {
+                delta += parseFloat(matrix[1].split(",")[5]);
+            }
+            slide.cancel();
+        }
+
+        if (delta == 0) {
+            return;
+        }
+
+        user["slide"] = row.animate(
+            [{"transform": "translateY(" + delta + "px)"},
+             {"transform": "none"}],
+            {"duration": duration, "easing": "ease-out"});
+    };
+
+    // Everything that reaches here is a deliberate gesture (a sort click,
+    // a filter toggle, a timeline jump or scrub tick), so even a full
+    // reshuffle animates: unlike the replay-tick variant below there is no
+    // cap, and the visibility filter bounds the work to about two
+    // viewports' worth of rows anyway.
+    self.animate_sort = function (before, duration) {
         var range = self.visible_range();
         var moved = new Array();
 
         for (const user of self.user_list) {
             var row = user["row"];
-            var delta = before[user["key"]] - row.offsetTop;
-            if (delta == 0) {
+            // Rows hidden on either side of the change appear (or vanish)
+            // in place: there is no old position to come from, or no
+            // visible destination to slide to
+            if (before[user["key"]] === undefined ||
+                self.is_filtered_out(user)) {
                 continue;
             }
 
+            var start = before[user["key"]];
+            var height = row.offsetHeight;
+
             // Only rows that are (or were) in the viewport get to slide
-            var was_visible = before[user["key"]] + row.offsetHeight > range["top"] &&
-                              before[user["key"]] < range["bottom"];
+            var was_visible = start + height > range["top"] &&
+                              start < range["bottom"];
             if (!was_visible && !self.is_row_visible(user, range)) {
                 continue;
             }
 
-            moved.push([row, delta]);
+            // A row coming from screens away would cross the viewport in a
+            // frame or two, invisible: entering rows are clamped to start
+            // just off the nearer edge, so they visibly whoosh in rather
+            // than teleporting (mirrors animate_playback_sort)
+            start = Math.min(start, range["bottom"] + height);
+            start = Math.max(start, range["top"] - 2 * height);
+
+            var delta = start - row.offsetTop;
+            if (delta == 0) {
+                continue;
+            }
+
+            moved.push([user, delta]);
         }
 
-        // A stampede of sliding rows cannot be followed anyway
+        for (const [user, delta] of moved) {
+            self.slide_row(user, delta, duration);
+        }
+    };
+
+    // Run a mutation that moves rows around (a new sort key, a filter
+    // toggle, a timeline jump) and slide them from where they were. Every
+    // measured reorder funnels through here, so the row_slides setting is
+    // consulted in one place; callers with extra conditions of their own
+    // (the timeline, whose playback frames answer to the nested
+    // playback_slides setting instead) pass the whole verdict as
+    // `enabled`, and callers whose slides read better slower (the sort
+    // clicks) pass a `duration`.
+    self.reorder_with_slides = function (mutate, enabled, duration) {
+        if (enabled === undefined) {
+            enabled = Settings.get("row_slides");
+        }
+        var before = enabled ? self.measure_rows() : null;
+        mutate();
+        if (before !== null) {
+            self.animate_sort(before, duration);
+        }
+    };
+
+    // The playback variant of animate_sort: pre- and post-sort positions
+    // are derived from the sorted indexes and the once-measured row height
+    // rather than from offsetTop, since a layout read on every replay tick
+    // is what the geometry cache exists to avoid.
+    //
+    // The deltas are viewport-space: scroll_delta is how far the follow
+    // recenter scrolled the frame within this tick, and folding it in
+    // makes every row slide from where it was *on screen*. A centered
+    // followed row nets out to zero (it stays pinned while the standings
+    // flow past it), and rows that didn't reorder glide up smoothly
+    // instead of jumping a row's worth with the scroll.
+    self.animate_playback_sort = function (old_indices, range, scroll_delta) {
+        // With a filter active the indexes don't map to positions (hidden
+        // rows still hold an index), so playback slides sit out
+        if (self.filtering || self.geometry === undefined) {
+            return;
+        }
+
+        var base = self.geometry["row_base"];
+        var height = self.geometry["row_height"];
+        var viewport = range["bottom"] - range["top"];
+        var moved = new Array();
+
+        for (const user of self.user_list) {
+            var old_idx = old_indices[user["key"]];
+            if (old_idx === undefined) {
+                continue;
+            }
+
+            var old_top = base + old_idx * height;
+            var new_top = base + user["index"] * height;
+            var delta = (old_top - new_top) + scroll_delta;
+
+            // Sub-pixel remainders (the recenter rounds its scroll target)
+            // aren't worth an animation
+            if (Math.abs(delta) < 1) {
+                continue;
+            }
+
+            // Where the slide starts and ends on screen (0 = viewport top;
+            // with scroll_delta folded in, "final + delta" is exactly the
+            // row's old on-screen position)
+            var final_visual = new_top - range["top"];
+            var start_visual = final_visual + delta;
+
+            // A row coming from screens away would cross the viewport in a
+            // frame or two, invisible: entering rows are clamped to start
+            // just off the nearer edge, so an overtaker visibly whooshes
+            // in rather than teleporting
+            start_visual = Math.min(start_visual, viewport + height);
+            start_visual = Math.max(start_visual, -2 * height);
+            delta = start_visual - final_visual;
+
+            // Only slides whose path crosses the viewport matter; this
+            // also admits pass-throughs (a row jumping from below the view
+            // to above it), which the endpoints alone would both miss
+            var low = Math.min(start_visual, final_visual);
+            var high = Math.max(start_visual, final_visual) + height;
+            if (high <= 0 || low >= viewport) {
+                continue;
+            }
+
+            moved.push([user, delta]);
+        }
+
         if (moved.length == 0 || moved.length > 40) {
             return;
         }
 
-        for (const [row, delta] of moved) {
-            row.style.transition = "none";
-            row.style.transform = "translateY(" + delta + "px)";
-        }
-
-        // Force a reflow so the starting offsets take hold before the slide
-        void self.tbody_el[0].offsetWidth;
-
-        for (const [row] of moved) {
-            row.style.transition = "transform 0.25s ease-out";
-            row.style.transform = "";
+        for (const [user, delta] of moved) {
+            self.slide_row(user, delta);
         }
     };
 };

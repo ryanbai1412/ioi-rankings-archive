@@ -17,10 +17,33 @@ import {format_time} from "./TimeView.js";
 // The slider works on integers, so we use a fine-grained range and normalize
 const SLIDER_STEPS = 100000;
 
-const SPEEDS = [1, 2, 4, 8, 16];
-
 // Contest seconds per real second at 1x, so that a 5 hour day lasts a minute
 const BASE_RATE = 300;
+
+// "Real time" undoes the base compression: one contest second per real second
+const REAL_TIME = 1 / BASE_RATE;
+
+const SPEEDS = [0.25, 0.5, 1, 2, 4, 8, 16, REAL_TIME];
+
+// The fractional speeds show as vulgar fractions, and real time as "1:1",
+// to fit the compact button
+function format_speed(speed) {
+    if (speed === REAL_TIME) {
+        return "1:1";
+    }
+    if (speed === 0.25) {
+        return "\u00BC\u00D7";
+    }
+    if (speed === 0.5) {
+        return "\u00BD\u00D7";
+    }
+    return speed + "\u00D7";
+}
+
+// The dropdown has room for the real-time option's full name
+function menu_label(speed) {
+    return speed === REAL_TIME ? "Real time" : format_speed(speed);
+}
 
 // Bounds for how often the scoreboard is recomputed while playing (in ms):
 // the actual pace adapts between them to what the device can render
@@ -57,7 +80,7 @@ export default new function () {
     // it, so the breaks between contests are skipped
     self.position = 1;
 
-    self.speed_idx = 0;
+    self.speed_idx = SPEEDS.indexOf(1);
     self.playing = false;
     // Whether a pointer is currently dragging on the track
     self.scrubbing = false;
@@ -181,10 +204,35 @@ export default new function () {
             self.toggle_play();
         });
 
+        // The speed button opens a dropdown with one option per speed
+        self.speed_box_el = $("#Timeline_speed_box");
+        self.speed_menu_el = $("#Timeline_speed_menu");
+
+        var options = "";
+        for (var i = 0; i < SPEEDS.length; i += 1) {
+            options += "<button type=\"button\" class=\"Timeline_speed_option\"" +
+                       " data-idx=\"" + i + "\">" + menu_label(SPEEDS[i]) +
+                       "</button>";
+        }
+        self.speed_menu_el.html(options);
+
         $("#Timeline_speed").click(function () {
-            self.speed_idx = (self.speed_idx + 1) % SPEEDS.length;
-            self.update_ui();
+            self.speed_box_el.toggleClass("open");
         });
+
+        self.speed_menu_el.on("click", ".Timeline_speed_option", function () {
+            self.set_speed(parseInt(this.dataset["idx"], 10));
+            self.speed_box_el.removeClass("open");
+        });
+
+        $(document).on("mousedown", function (event) {
+            if (self.speed_box_el.hasClass("open") &&
+                !$.contains(self.speed_box_el[0], event.target)) {
+                self.speed_box_el.removeClass("open");
+            }
+        });
+
+        self.set_speed(self.speed_idx);
 
         // Until now the markup was the greyed-out pre-load skeleton
         // (identical geometry, everything disabled)
@@ -211,8 +259,10 @@ export default new function () {
             }
 
             // A focused button keeps its native Space/Enter activation
-            // (e.g. Space on the follow dropdown's toggle must open it,
-            // not start playback)
+            // (e.g. Space on the tabbed-to follow dropdown's toggle must
+            // open it, not start playback). Only keyboard focus can reach
+            // here: the pointerup handler below drops the focus a mouse
+            // click would otherwise leave on a button.
             if ($(event.target).is("button") &&
                 (event.key === " " || event.key === "Enter")) {
                 return;
@@ -250,7 +300,21 @@ export default new function () {
                 event.preventDefault();
                 self.toggle_play();
                 break;
+            case "Escape":
+                self.speed_box_el.removeClass("open");
+                break;
             }
+        });
+
+        // Clicking a button leaves it focused, and the exemption above
+        // would then hand Space to that button (re-triggering it) instead
+        // of toggling playback. Blur it once the pointer interaction ends:
+        // keyboard activation fires no pointer events, so tab focus (and
+        // its Space/Enter handling) is unaffected. (:focus-visible can't
+        // tell the cases apart here: pressing a key puts the mouse-focused
+        // button into that state before the keydown handler runs.)
+        $(document).on("pointerup pointercancel", "button", function () {
+            this.blur();
         });
 
         self.update_ui();
@@ -367,16 +431,20 @@ export default new function () {
         // after the writes below would force a synchronous reflow
         var range = Scoreboard.visible_range();
 
-        // Flashes and badges follow the display settings, and switch off at
-        // high playback speeds, where they can't be read anyway. Rows slide
-        // on discrete jumps and while scrubbing, but not during playback,
-        // where the constant reordering can't be followed.
+        // Flashes, badges and slides follow the display settings, and switch
+        // off at high playback speeds, where they can't be read anyway. On
+        // discrete jumps and scrub ticks the rows slide FLIP-style from
+        // measured positions; during playback they slide from index-derived
+        // positions instead (since layout reads on every tick are too slow)
+        // and only when their own nested setting asks for them.
         var readable = !self.playing || SPEEDS[self.speed_idx] <= 4;
         var flashes = readable && Settings.get("score_flashes");
         var deltas = readable && Settings.get("rank_deltas");
         var drops = readable && Settings.get("rank_drops");
         var effects = flashes || deltas || drops;
-        var slide = !self.playing;
+        var slide = !self.playing && Settings.get("row_slides");
+        var playback_slides = self.playing && readable &&
+                              Settings.get("playback_slides");
 
         // Ranks in the currently displayed sorting, snapshotted before the
         // events mutate any scores, so the rank-delta badges reflect the
@@ -400,23 +468,39 @@ export default new function () {
             Scoreboard.refresh_user(DataStore.users[u_id]);
         }
 
-        var measured = slide ? Scoreboard.measure_rows() : null;
+        // During playback the pre-sort positions come from the sorted
+        // indexes and the cached row height, avoiding any layout read
+        var old_indices = playback_slides ?
+            Scoreboard.snapshot_indices() : null;
 
-        // Ranks (and thus the order) may have changed for everyone
-        Scoreboard.sort();
+        var old_range = range;
 
-        Follow.recenter();
+        // On discrete jumps and scrub ticks the reorder helper measures
+        // the rows and slides them from their true positions — the same
+        // path the interactive reorders (sort clicks, filter toggles) take
+        Scoreboard.reorder_with_slides(function () {
+            // Ranks (and thus the order) may have changed for everyone
+            Scoreboard.sort();
 
-        // The recenter may have scrolled the frame: refresh the viewport
-        // span so the effects below judge visibility against where the view
-        // ended up, or the followed row would miss its own badges whenever
-        // it jumps (the geometry cache makes this a plain scrollTop read)
-        if (effects) {
-            range = Scoreboard.visible_range();
-        }
+            Follow.recenter();
 
-        if (measured !== null) {
-            Scoreboard.animate_sort(measured);
+            // The recenter may have scrolled the frame: refresh the
+            // viewport span so the effects below judge visibility against
+            // where the view ended up, or the followed row would miss its
+            // own badges whenever it jumps (the geometry cache makes this
+            // a plain scrollTop read)
+            if (effects || playback_slides) {
+                range = Scoreboard.visible_range();
+            }
+        }, slide);
+
+        if (old_indices !== null) {
+            // Slides run in viewport space: the recenter's instant scroll
+            // jump is folded into every row's delta, so with a followed
+            // row on the move the camera work reads as the others flowing
+            // smoothly past a pinned row, not as everything lurching
+            Scoreboard.animate_playback_sort(
+                old_indices, range, range["top"] - old_range["top"]);
         }
 
         if (flashes) {
@@ -449,7 +533,7 @@ export default new function () {
         // Only playback frames are judged: jumps and scrub ticks include
         // the FLIP row measurement (a whole-table reflow), so they are
         // slow by design and say nothing about the device.
-        if (effects && self.playing) {
+        if ((effects || playback_slides) && self.playing) {
             var elapsed = performance.now() - start;
             self.slow_frames = elapsed > SLOW_FRAME_MS ? self.slow_frames + 1 : 0;
             if (self.slow_frames >= SLOW_FRAME_LIMIT) {
@@ -790,6 +874,16 @@ export default new function () {
 
     ////// UI
 
+    // The selected marker only moves here, not in update_ui, which runs on
+    // every animation frame during playback
+    self.set_speed = function (idx) {
+        self.speed_idx = idx;
+        self.speed_menu_el.children().each(function (i) {
+            $(this).toggleClass("selected", i === idx);
+        });
+        self.update_ui();
+    };
+
     self.update_ui = function () {
         self.slider_el.val(Math.round(self.position * SLIDER_STEPS));
         // The fill should end under the thumb's center, and the thumb (14px
@@ -799,7 +893,7 @@ export default new function () {
 
         self.play_el.toggleClass("playing", self.playing)
             .attr("title", self.playing ? "Pause (Space/K)" : "Play (Space/K)");
-        self.speed_el.text(SPEEDS[self.speed_idx] + "\u00D7");
+        self.speed_el.text(format_speed(SPEEDS[self.speed_idx]));
         self.label_el.text(self.format_position());
     };
 

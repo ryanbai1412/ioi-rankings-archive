@@ -34,7 +34,8 @@ export default new function () {
     // Whether the one-time auto-disable notice has already been shown
     const NOTICE_KEY = "ranking_effects_notice";
 
-    const ANIMATION_SETTINGS = ["rank_deltas", "rank_drops", "score_flashes"];
+    const ANIMATION_SETTINGS = ["rank_deltas", "rank_drops", "score_flashes",
+                                "row_slides", "playback_slides"];
 
     self.init = function () {
         self.stored = self.load(STORAGE_KEY) || {};
@@ -143,6 +144,12 @@ export default new function () {
     };
 
     self.default_value = function (name) {
+        // Sliding rows during playback is the costliest effect (the
+        // standings can reorder on every replay tick), so it is opt-in;
+        // the one-shot slides on sorts, filters and timeline jumps are on
+        if (name === "playback_slides") {
+            return false;
+        }
         if (ANIMATION_SETTINGS.indexOf(name) !== -1) {
             // On until proven costly: when replay frames run slow on this
             // device the default flips to off (see report_slow_effects)
@@ -151,7 +158,7 @@ export default new function () {
         if (name === "debug_info") {
             return false;
         }
-        // global_ranks
+        // global_ranks, medal_colors
         return true;
     };
 
@@ -171,8 +178,12 @@ export default new function () {
     // The effective value. The passive drops are a refinement of the rank
     // badges: with the badges off they are off too, whatever their own
     // toggle says (it keeps its state for when the badges come back).
+    // The playback slides nest under the row slides the same way.
     self.get = function (name) {
         if (name === "rank_drops" && !self.get("rank_deltas")) {
+            return false;
+        }
+        if (name === "playback_slides" && !self.get("row_slides")) {
             return false;
         }
         return self.own_value(name);
@@ -190,10 +201,12 @@ export default new function () {
         self.notify(name);
     };
 
-    // Grey out the nested passive-drops toggle while its parent is off
+    // Grey out the nested toggles while their parent is off
     self.update_nesting = function () {
         self.panel_el.find("input[data-setting=rank_drops]")
             .prop("disabled", !self.get("rank_deltas"));
+        self.panel_el.find("input[data-setting=playback_slides]")
+            .prop("disabled", !self.get("row_slides"));
     };
 
     // Forget the remembered slow verdict and the shown-notice flag, so the

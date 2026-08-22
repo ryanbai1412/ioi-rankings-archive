@@ -81,6 +81,20 @@
                         <div id="Settings_warning">May reduce replay smoothness on this device.</div>
                         <div class="Settings_row">
                             <label class="Settings_item">
+                                <input type="checkbox" data-setting="row_slides"/>
+                                <span>Row slide animations</span>
+                            </label>
+                            <button type="button" class="Settings_info" aria-label="More information" data-info="Slide rows to their new position when the standings reorder, instead of jumping instantly."></button>
+                        </div>
+                        <div class="Settings_row Settings_sub">
+                            <label class="Settings_item">
+                                <input type="checkbox" data-setting="playback_slides"/>
+                                <span>Row slide animations during playback</span>
+                            </label>
+                            <button type="button" class="Settings_info" aria-label="More information" data-info="Also slide rows while the replay is playing, not just on sorts, filters and timeline jumps. The most demanding effect: the standings can reorder on every tick."></button>
+                        </div>
+                        <div class="Settings_row">
+                            <label class="Settings_item">
                                 <input type="checkbox" data-setting="score_flashes"/>
                                 <span>Score change flashes</span>
                             </label>
@@ -92,6 +106,13 @@
                                 <span>Global rank in parentheses</span>
                             </label>
                             <button type="button" class="Settings_info" aria-label="More information" data-info="When the scoreboard is filtered to selected teams or sorted in an alternate order, also show each contestant's rank among all contestants, in parentheses."></button>
+                        </div>
+                        <div class="Settings_row">
+                            <label class="Settings_item">
+                                <input type="checkbox" data-setting="medal_colors"/>
+                                <span>Medal colors</span>
+                            </label>
+                            <button type="button" class="Settings_info" aria-label="More information" data-info="Color each contestant's rank cell gold, silver, bronze or purple according to the medal or honourable mention their rank earns."></button>
                         </div>
                         <div class="Settings_row">
                             <label class="Settings_item">
@@ -131,7 +152,10 @@
                     <button id="Timeline_prev" type="button" title="Seek to the previous day" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6h2v12H6z M18 6l-8.5 6 8.5 6z"/></svg></button>
                     <button id="Timeline_play" type="button" title="Play (Space/K)" disabled><svg class="icon_play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg><svg class="icon_pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h4v14H6z M14 5h4v14h-4z"/></svg></button>
                     <button id="Timeline_next" type="button" title="Seek to the next day" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l8.5 6L6 18z M16 6h2v12h-2z"/></svg></button>
-                    <button id="Timeline_speed" type="button" title="Playback speed" disabled>1&#xD7;</button>
+                    <div id="Timeline_speed_box">
+                        <button id="Timeline_speed" type="button" title="Playback speed" disabled>1&#xD7;</button>
+                        <div id="Timeline_speed_menu"></div>
+                    </div>
                 </div>
                 <div id="Follow">
                     <button id="Follow_eye" type="button" class="disabled" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path class="Follow_eye_body" d="M12 5.5 C6.5 5.5 2.5 10.5 1.3 12 C2.5 13.5 6.5 18.5 12 18.5 C17.5 18.5 21.5 13.5 22.7 12 C21.5 10.5 17.5 5.5 12 5.5 Z"/><circle class="Follow_eye_pupil" cx="12" cy="12" r="3.2"/></svg></button>
@@ -200,6 +224,15 @@
                 <div id="UserDetail_charts">
                     <canvas id="UserDetail_score_chart" width="920" height="250"></canvas>
                     <canvas id="UserDetail_rank_chart" width="920" height="250"></canvas>
+                    <div id="UserDetail_chart_hover_line"></div>
+                    <div id="UserDetail_chart_dot_score" class="UserDetail_chart_dot"></div>
+                    <div id="UserDetail_chart_dot_rank" class="UserDetail_chart_dot"></div>
+                    <div id="UserDetail_chart_tooltip">
+                        <div id="UserDetail_chart_tooltip_time"></div>
+                        <div class="UserDetail_chart_tooltip_row"><span class="label score">Score</span><span id="UserDetail_chart_tooltip_score"></span></div>
+                        <div class="UserDetail_chart_tooltip_row" id="UserDetail_chart_tooltip_tasks_row"><span class="label distr">Distr</span><span id="UserDetail_chart_tooltip_tasks"></span></div>
+                        <div class="UserDetail_chart_tooltip_row"><span class="label rank">Rank</span><span id="UserDetail_chart_tooltip_rank"></span></div>
+                    </div>
                 </div>
                 <div id="UserDetail_submissions">
                 </div>
