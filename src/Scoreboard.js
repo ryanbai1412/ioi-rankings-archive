@@ -745,12 +745,24 @@ export default new function () {
     // table, which dominated the profile on slow devices
     self.measure_geometry = function () {
         var frame = $("#InnerFrame")[0];
-        var first_row = self.tbody_el[0].firstElementChild;
+        var tbody = self.tbody_el[0];
+        var first_row = tbody.firstElementChild;
+
+        // The row height must keep its fractional part (offsetHeight rounds
+        // to an integer): index * height accumulates the rounding error to
+        // whole rows' worth by the bottom of the table, e.g. when centering
+        // on a followed row. Averaging over the whole body also irons out
+        // per-row rounding of borders.
+        var row_height = 0;
+        if (first_row !== null) {
+            row_height = tbody.getBoundingClientRect().height /
+                         tbody.childElementCount;
+        }
 
         self.geometry = {
             "table_top": $("#Scoreboard")[0].offsetTop,
             "row_base": first_row !== null ? first_row.offsetTop : 0,
-            "row_height": first_row !== null ? first_row.offsetHeight : 0,
+            "row_height": row_height,
             "frame": frame,
             "frame_height": frame.clientHeight
         };

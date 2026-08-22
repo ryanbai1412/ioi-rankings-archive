@@ -108,6 +108,8 @@ export default new function () {
             }
 
             self.scrubbing = true;
+            // The drag keeps this measurement for its whole run
+            Scoreboard.geometry = undefined;
             self.last_scrub_apply = 0;
             self.scrub_to(event.clientX, false);
         });
@@ -262,6 +264,15 @@ export default new function () {
         // so a batch of crossed events nets out for the flash effects
         var first_score = new Object();
         var last_score = new Object();
+
+        // The cached geometry goes stale as the page settles (rows grow when
+        // fonts and images come in), so take fresh measurements on discrete
+        // jumps; during continuous playback or scrubbing the measurement
+        // from the start of the gesture is kept, since re-measuring on every
+        // tick would force a reflow each time
+        if (!self.playing && !self.scrubbing) {
+            Scoreboard.geometry = undefined;
+        }
 
         // Read the viewport now, while the layout is still clean: doing it
         // after the writes below would force a synchronous reflow
@@ -516,6 +527,8 @@ export default new function () {
         }
 
         self.playing = true;
+        // Playback keeps this measurement for its whole run, so start fresh
+        Scoreboard.geometry = undefined;
         self.last_frame = null;
         self.frame_request = window.requestAnimationFrame(self.on_frame);
         self.update_ui();
