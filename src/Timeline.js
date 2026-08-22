@@ -10,6 +10,7 @@ import Follow from "./Follow.js";
 import HistoryStore from "./HistoryStore.js";
 import Overview from "./Overview.js";
 import Scoreboard from "./Scoreboard.js";
+import Settings from "./Settings.js";
 import {format_time} from "./TimeView.js";
 
 // The slider works on integers, so we use a fine-grained range and normalize
@@ -34,8 +35,11 @@ const ARROW_STEP = 15 * 60;
 // How far J and L jump, in contest seconds
 const JUMP_STEP = 60 * 60;
 
-// No flash/badge effects when the viewport shows more rows than this
-const MAX_EFFECT_ROWS = 50;
+// A scoreboard update slower than this is a slow frame, and this many
+// consecutive slow frames flip the animation settings' default to off
+// (unless the user explicitly turned them on)
+const SLOW_FRAME_MS = 40;
+const SLOW_FRAME_LIMIT = 10;
 
 // Inline SVG control icons: Unicode glyphs like U+23EE render differently
 // per font, and mobile platforms show them as color emoji
@@ -70,6 +74,9 @@ export default new function () {
     // Adaptive throttle for the scoreboard updates (see on_frame)
     self.apply_interval = MIN_FRAME_INTERVAL;
     self.applied_last_frame = false;
+
+    // Consecutive slow updates seen while animations were enabled
+    self.slow_frames = 0;
 
     self.init = function () {
         self.contests = DataStore.contest_list;
@@ -259,6 +266,7 @@ export default new function () {
 
     // Set the scoreboard to the state it had at the given (absolute) time
     self.apply_time = function (time) {
+        var start = performance.now();
         var dirty = new Object();
         // First and last score seen per changed cell (keyed "user/task"),
         // so a batch of crossed events nets out for the flash effects
@@ -278,20 +286,20 @@ export default new function () {
         // after the writes below would force a synchronous reflow
         var range = Scoreboard.visible_range();
 
-        // Flashes and badges can't be read at high playback speeds, so they
-        // switch off there; they also switch off when the viewport shows a
-        // huge number of rows at once (a phone with the page zoomed out to
-        // fit), where animating them all is too expensive to be smooth.
-        // Rows slide on discrete jumps and while scrubbing, but not during
-        // playback, where the constant reordering can't be followed anyway
-        var effects = (!self.playing || SPEEDS[self.speed_idx] <= 4) &&
-                      Scoreboard.visible_row_count(range) <= MAX_EFFECT_ROWS;
+        // Flashes and badges follow the display settings, and switch off at
+        // high playback speeds, where they can't be read anyway. Rows slide
+        // on discrete jumps and while scrubbing, but not during playback,
+        // where the constant reordering can't be followed.
+        var readable = !self.playing || SPEEDS[self.speed_idx] <= 4;
+        var flashes = readable && Settings.get("score_flashes");
+        var deltas = readable && Settings.get("rank_deltas");
+        var effects = flashes || deltas;
         var slide = !self.playing;
 
         // Ranks in the currently displayed sorting, snapshotted before the
         // events mutate any scores, so the rank-delta badges reflect the
         // active column rather than always the global standings
-        var old_ranks = effects ? Scoreboard.get_local_ranks() : null;
+        var old_ranks = deltas ? Scoreboard.get_local_ranks() : null;
 
         while (self.applied < self.events.length &&
                self.events[self.applied]["time"] <= time) {
@@ -345,7 +353,7 @@ export default new function () {
             Scoreboard.animate_sort(measured);
         }
 
-        if (effects) {
+        if (flashes) {
             for (var key in last_score) {
                 var sep = key.indexOf("/");
                 var user = DataStore.users[key.slice(0, sep)];
@@ -354,7 +362,9 @@ export default new function () {
                     Scoreboard.flash_cell(user, key.slice(sep + 1), delta);
                 }
             }
+        }
 
+        if (deltas) {
             var new_ranks = Scoreboard.get_local_ranks();
 
             for (var u_id in dirty) {
@@ -364,6 +374,17 @@ export default new function () {
                     Scoreboard.is_row_visible(user, range)) {
                     Scoreboard.show_rank_delta(user, old_ranks[u_id], new_ranks[u_id]);
                 }
+            }
+        }
+
+        // Slow updates while animations run on their default-on state make
+        // the default flip to off; an explicit user choice is respected
+        if (effects) {
+            var elapsed = performance.now() - start;
+            self.slow_frames = elapsed > SLOW_FRAME_MS ? self.slow_frames + 1 : 0;
+            if (self.slow_frames >= SLOW_FRAME_LIMIT) {
+                self.slow_frames = 0;
+                Settings.report_slow_effects();
             }
         }
 

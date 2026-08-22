@@ -18,6 +18,7 @@
 import $ from "jquery";
 import Config from "./Config.js";
 import DataStore, {round_to_str} from "./DataStore.js";
+import Settings from "./Settings.js";
 import UserDetail from "./UserDetail.js";
 
 var escapeHTML = (function() {
@@ -57,6 +58,12 @@ export default new function () {
         // The cached table geometry is only valid for the current layout
         $(window).on("resize", function () {
             self.geometry = undefined;
+        });
+
+        Settings.on_change(function (name) {
+            if (name === "global_ranks") {
+                self.update_ranks();
+            }
         });
     };
 
@@ -474,8 +481,8 @@ export default new function () {
             local_rank = self.get_local_rank(user);
         }
 
-        if (global_rank === local_rank) {
-            return global_rank.toString();
+        if (global_rank === local_rank || !Settings.get("global_ranks")) {
+            return local_rank.toString();
         } else {
             return `${local_rank} (${global_rank})`;
         }
@@ -786,13 +793,6 @@ export default new function () {
             "top": top,
             "bottom": top + self.geometry["frame_height"]
         };
-    };
-
-    self.visible_row_count = function (range) {
-        if (self.geometry["row_height"] == 0) {
-            return 0;
-        }
-        return (range["bottom"] - range["top"]) / self.geometry["row_height"];
     };
 
     self.is_row_visible = function (user, range) {

@@ -25,6 +25,7 @@ import Overview from "./Overview.js";
 import Scoreboard from "./Scoreboard.js";
 import Timeline from "./Timeline.js";
 import Follow from "./Follow.js";
+import Settings from "./Settings.js";
 
 if (!window.console) {
     window.console = new Object();
@@ -54,6 +55,8 @@ $(document).ready(function() {
         document.documentElement.style.setProperty(
             "--scrollbar-width", (frame.offsetWidth - frame.clientWidth) + "px");
     }
+
+    Settings.init();
 
     DataStore.init(function() {
         HistoryStore.init();

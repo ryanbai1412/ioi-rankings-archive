@@ -604,24 +604,10 @@ window.DataStore = new function () {
 
     self.update_network_status = function (state) {
         self.network_state = state;
-        if (state == 0) {
-            $("#ConnectionStatus_box").attr("data-status", "reconnecting");
-            $("#ConnectionStatus_text").text("You are downloading the archived data from the server...");
-            $("#ConnectionStatus_label").html("Loading");
-        } else if (state == 1) {
-            $("#ConnectionStatus_box").attr("data-status", "connected");
-            $("#ConnectionStatus_text").html("The archived data has been successfully loaded");
-            $("#ConnectionStatus_label").html("Archived");
-        } else if (state == 2) {
-            $("#ConnectionStatus_box").attr("data-status", "init_error");
-            $("#ConnectionStatus_text").html("An error occurred while loading the data. Check your connection and <a onclick=\"window.location.reload();\">reload the page</a>.");
-            $("#ConnectionStatus_label").html("Error");
-        }
+        // States 0 (loading) and 1 (loaded) need no indicator for archived
+        // data; only a load failure is surfaced
+        $("#LoadError").toggle(state == 2);
     };
-
-    $(document).ready(function () {
-        self.update_network_status(0);
-    });
 
 
     ////// Sorted contest list

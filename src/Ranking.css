@@ -1694,83 +1694,88 @@ abbr {
 }
 
 
-/* Style for the network status indicator */
+/* Style for the display settings */
 
-#ConnectionStatus_box {
-    display: inline-block;
+#Settings_box {
     position: relative;
     float: right;
     margin: 0.5em;
-    text-align: right;
-    z-index: 2;
+    z-index: 6;
 }
 
-#ConnectionStatus_label {
-    display: inline-block;
-    position: relative;
-    height: 1.3em;
-    padding: 0.25em 20px;
-    z-index: 2;
-    border-width: 1px;
-    border-style: solid;
+#Settings_button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.2em;
+    height: 1.8em;
+    border: 1px solid #1745ff;
     border-radius: 4px;
-    -webkit-user-select: none;
-    -moz-user-select: none;
-    -ms-user-select: none;
-    -o-user-select: none;
-    user-select: none;
+    padding: 0;
+    /* Buttons don't inherit the font, and mobile WebKit's default button
+       font-size is smaller, which shrinks the em-based dimensions */
+    font: inherit;
+    color: #1745ff;
+    background-color: #FFFFFF;
+    cursor: pointer;
 }
 
-#ConnectionStatus_box:hover #ConnectionStatus_label {
-    border-bottom-width: 0;
-    border-bottom-left-radius: 0;
-    border-bottom-right-radius: 0;
+#Settings_box.open #Settings_button {
+    color: #FFFFFF;
+    background-color: #1745ff;
 }
 
-#ConnectionStatus_text {
+#Settings_panel {
     display: none;
-    position: fixed;
-    top: 2.5em;
-    right: 0.5em;
-    padding: 0.5em;
-    margin-top: -1px;
-    z-index: 1;
-    border-width: 1px;
-    border-style: solid;
-    border-radius: 4px 0 4px 4px;
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    width: 20em;
+    padding: 0.6em 0.8em;
+    background-color: #FFFFFF;
+    border: 1px solid #b1b1b1;
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    text-align: left;
 }
 
-#ConnectionStatus_box:hover #ConnectionStatus_text,
-#ConnectionStatus_text:hover {
+#Settings_box.open #Settings_panel {
     display: block;
 }
 
-#ConnectionStatus_box[data-status="connected"] #ConnectionStatus_label,
-#ConnectionStatus_box[data-status="connected"] #ConnectionStatus_text {
-    background-color: white;
-    color: green;
-    border-color: green;
+#Settings_title {
+    font-weight: bold;
+    margin-bottom: 0.5em;
 }
 
-#ConnectionStatus_box[data-status="reconnecting"] #ConnectionStatus_label,
-#ConnectionStatus_box[data-status="reconnecting"] #ConnectionStatus_text {
-    background-color: yellow;
-    color: black;
-    border-color: black;
+.Settings_item {
+    display: flex;
+    align-items: center;
+    gap: 0.4em;
+    padding: 0.25em 0;
+    cursor: pointer;
+    -webkit-user-select: none;
+    user-select: none;
 }
 
-#ConnectionStatus_box[data-status="disconnected"] #ConnectionStatus_label,
-#ConnectionStatus_box[data-status="disconnected"] #ConnectionStatus_text,
-#ConnectionStatus_box[data-status="outdated"] #ConnectionStatus_label,
-#ConnectionStatus_box[data-status="outdated"] #ConnectionStatus_text,
-#ConnectionStatus_box[data-status="init_error"] #ConnectionStatus_label,
-#ConnectionStatus_box[data-status="init_error"] #ConnectionStatus_text {
+#Settings_warning {
+    display: none;
+    margin: 0 0 0.25em 1.8em;
+    font-size: 0.85em;
+    color: #c4a000;
+}
+
+#Settings_warning.visible {
+    display: block;
+}
+
+#LoadError {
+    display: none;
+    float: right;
+    margin: 0.5em;
+    padding: 0.25em 0.5em;
+    border: 1px solid red;
+    border-radius: 4px;
     background-color: red;
     color: white;
-    border-color: red;
-}
-
-#ConnectionStatus_box a {
-    cursor: pointer;
-    text-decoration: underline;
 }
