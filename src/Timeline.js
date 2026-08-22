@@ -140,6 +140,12 @@ export default new function () {
                     self.play();
                 }
             }
+
+            // Catch up on an overview redraw the scrub ticks deferred
+            // (unless playback resumed, in which case the next pause will)
+            if (!self.playing && self.overview_stale) {
+                self.update_overview();
+            }
         };
 
         track.addEventListener("pointerup", end_scrub);
@@ -229,12 +235,9 @@ export default new function () {
      */
 
     self.build_events = function () {
-        var last_score = new Object();
-
         self.events = new Array();
 
-        for (var i in HistoryStore.history_t) {
-            var entry = HistoryStore.history_t[i];
+        for (const entry of HistoryStore.history_t) {
             var u_id = entry[0], t_id = entry[1], time = entry[2], score = entry[3];
 
             var task = DataStore.tasks[t_id];
@@ -242,22 +245,29 @@ export default new function () {
                 continue;
             }
 
-            var key = u_id + "/" + t_id;
-            var prev = last_score[key] || 0.0;
-            var next = round(score, task["score_precision"]);
-            last_score[key] = next;
-
             // The user object and the property to poke are resolved once
             // here: the apply loops run over thousands of events per tick
             self.events.push({"user": u_id, "task": t_id, "time": time,
                               "user_obj": DataStore.users[u_id],
-                              "t_key": "t_" + t_id, "key": key,
-                              "score": next, "prev_score": prev});
+                              "t_key": "t_" + t_id, "key": u_id + "/" + t_id,
+                              "score": round(score, task["score_precision"]),
+                              "prev_score": 0.0});
         }
 
+        // A stable sort, so same-time events for a key keep their order
         self.events.sort(function (a, b) {
             return a["time"] - b["time"];
         });
+
+        // Each event's "before" score is the previous event's "after" score,
+        // chained in sorted time order so that undoing events while seeking
+        // backwards restores the right values (the source data happens to be
+        // time-sorted already, but nothing should depend on that)
+        var last_score = new Object();
+        for (const event of self.events) {
+            event["prev_score"] = last_score[event["key"]] || 0.0;
+            last_score[event["key"]] = event["score"];
+        }
 
         // All the events have been applied, since we start at the end
         self.applied = self.events.length;
@@ -428,8 +438,11 @@ export default new function () {
         }
 
         // Slow updates while animations run on their default-on state make
-        // the default flip to off; an explicit user choice is respected
-        if (effects) {
+        // the default flip to off; an explicit user choice is respected.
+        // Only playback frames are judged: jumps and scrub ticks include
+        // the FLIP row measurement (a whole-table reflow), so they are
+        // slow by design and say nothing about the device.
+        if (effects && self.playing) {
             var elapsed = performance.now() - start;
             self.slow_frames = elapsed > SLOW_FRAME_MS ? self.slow_frames + 1 : 0;
             if (self.slow_frames >= SLOW_FRAME_LIMIT) {
@@ -439,8 +452,9 @@ export default new function () {
         }
 
         // Redrawing the overview chart (SVG) is too slow to do every tick,
-        // so during playback it's deferred until the next pause
-        if (self.playing) {
+        // so during playback and scrubbing it's deferred until the next
+        // pause (or the release of the thumb)
+        if (self.playing || self.scrubbing) {
             self.overview_stale = true;
         } else {
             self.update_overview();
@@ -514,7 +528,7 @@ export default new function () {
             return;
         }
 
-        var position = self.snap((client_x - rect.left - 7) / travel);
+        var position = self.snap((client_x - rect.left - 7) / travel, travel);
 
         var now = performance.now();
         var skip = !finish && now - self.last_scrub_apply < self.apply_interval;
@@ -525,14 +539,10 @@ export default new function () {
         self.set_position(position, skip);
     };
 
-    // Pull a scrubbed position onto a stop if it lands close enough to one
-    self.snap = function (position) {
-        // The thumb (14px wide) travels over the track minus its own width
-        var travel = self.slider_el.width() - 14;
-        if (travel <= 0) {
-            return position;
-        }
-
+    // Pull a scrubbed position onto a stop if it lands close enough to one.
+    // The travel (the track's width minus the thumb's) is passed in, since
+    // the caller measured it already and a re-read would force a layout.
+    self.snap = function (position, travel) {
         var threshold = SNAP_PIXELS / travel;
         var stops = self.get_stops();
         var best = position;

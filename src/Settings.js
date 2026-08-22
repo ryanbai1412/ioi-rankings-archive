@@ -40,6 +40,11 @@ export default new function () {
         self.stored = self.load(STORAGE_KEY) || {};
         self.change_callbacks = [];
 
+        // Console access for trying out flows by hand, e.g.
+        //   Settings.set_force_mobile(true)   mobile-only UI on a desktop
+        //   Settings.reset_effects_verdict(); Settings.report_slow_effects()
+        window.Settings = self;
+
         self.box_el = $("#Settings_box");
         self.panel_el = $("#Settings_panel");
 
@@ -55,10 +60,14 @@ export default new function () {
         });
 
         self.panel_el.find("input[data-setting]").each(function () {
-            this.checked = self.get(this.dataset["setting"]);
+            // The checkboxes show each setting's own state; a nested one
+            // that is gated off by its parent shows it greyed out instead
+            this.checked = self.own_value(this.dataset["setting"]);
         }).on("change", function () {
             self.set(this.dataset["setting"], this.checked);
         });
+
+        self.update_nesting();
 
         // The info buttons show their explanation in a floating tooltip
         // bubble: next to the pointer on hover where the device supports
@@ -112,10 +121,25 @@ export default new function () {
     // browsers lie in their UA for compatibility, while a touch-only input
     // setup identifies phones and tablets reliably
     self.is_mobile = function () {
+        if (self.force_mobile) {
+            return true;
+        }
         if (navigator.userAgentData !== undefined) {
             return navigator.userAgentData.mobile;
         }
         return window.matchMedia("(pointer: coarse) and (hover: none)").matches;
+    };
+
+    // Pretend to be a mobile device, to preview the mobile-only behavior
+    // (animation defaults off, the smoothness warning) from the console
+    self.set_force_mobile = function (flag) {
+        self.force_mobile = flag;
+        // Un-toggled settings follow the device default, which just moved
+        self.panel_el.find("input[data-setting]").each(function () {
+            this.checked = self.own_value(this.dataset["setting"]);
+        });
+        self.update_warning();
+        self.update_nesting();
     };
 
     self.default_value = function (name) {
@@ -129,8 +153,9 @@ export default new function () {
         return true;
     };
 
-    // The effective value: the user's explicit choice, or the default
-    self.get = function (name) {
+    // The setting's own value: the user's explicit choice, or the default
+    // (without the parent gate that get applies)
+    self.own_value = function (name) {
         var stored = self.stored[name];
         if (stored === "on") {
             return true;
@@ -141,6 +166,16 @@ export default new function () {
         return self.default_value(name);
     };
 
+    // The effective value. The passive drops are a refinement of the rank
+    // badges: with the badges off they are off too, whatever their own
+    // toggle says (it keeps its state for when the badges come back).
+    self.get = function (name) {
+        if (name === "rank_drops" && !self.get("rank_deltas")) {
+            return false;
+        }
+        return self.own_value(name);
+    };
+
     self.is_explicit = function (name) {
         return self.stored[name] === "on" || self.stored[name] === "off";
     };
@@ -149,7 +184,14 @@ export default new function () {
         self.stored[name] = value ? "on" : "off";
         self.save(STORAGE_KEY, self.stored);
         self.update_warning();
+        self.update_nesting();
         self.notify(name);
+    };
+
+    // Grey out the nested passive-drops toggle while its parent is off
+    self.update_nesting = function () {
+        self.panel_el.find("input[data-setting=rank_drops]")
+            .prop("disabled", !self.get("rank_deltas"));
     };
 
     // Forget the remembered slow verdict and the shown-notice flag, so the
@@ -176,11 +218,12 @@ export default new function () {
         for (const name of ANIMATION_SETTINGS) {
             if (!self.is_explicit(name)) {
                 self.panel_el.find("input[data-setting=" + name + "]")
-                    .prop("checked", self.get(name));
+                    .prop("checked", self.own_value(name));
                 self.notify(name);
                 changed = true;
             }
         }
+        self.update_nesting();
 
         if (changed && self.load(NOTICE_KEY) === null) {
             self.save(NOTICE_KEY, true);
@@ -217,11 +260,13 @@ export default new function () {
         }
     };
 
-    // The performance warning under the rank-badges toggle, shown when it
-    // is enabled on a mobile device
+    // The performance warning under the animation toggles, shown when any
+    // of them is enabled on a mobile device
     self.update_warning = function () {
-        var show = self.is_mobile() && self.get("rank_deltas");
-        $("#Settings_warning").toggleClass("visible", show);
+        var enabled = ANIMATION_SETTINGS.some(function (name) {
+            return self.get(name);
+        });
+        $("#Settings_warning").toggleClass("visible", self.is_mobile() && enabled);
     };
 
     self.load = function (key) {

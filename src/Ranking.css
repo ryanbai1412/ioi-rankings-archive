@@ -1821,6 +1821,18 @@ abbr {
     align-items: center;
 }
 
+/* A setting nested under the one above it (passive drops refine the rank
+   badges); it gets disabled when its parent is off */
+.Settings_row.Settings_sub {
+    margin-left: 1.4em;
+}
+
+.Settings_item input:disabled,
+.Settings_item input:disabled + span {
+    color: #9B9B9F;
+    cursor: default;
+}
+
 .Settings_item {
     display: flex;
     align-items: center;

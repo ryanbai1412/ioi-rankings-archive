@@ -58,6 +58,7 @@ export default new function () {
         // The cached table geometry is only valid for the current layout
         $(window).on("resize", function () {
             self.geometry = undefined;
+            self.reposition_overlay_badges();
         });
 
         Settings.on_change(function (name) {
@@ -276,8 +277,12 @@ export default new function () {
             $(user["row"]).toggleClass("filtered_out", self.is_filtered_out(user));
         }
 
+        // Hiding or showing rows changes every measurement in the cache
+        self.geometry = undefined;
+
         self.update_ranks();
         self.update_filter_ui();
+        self.reposition_overlay_badges();
     };
 
     self.selected_count = function () {
@@ -755,7 +760,14 @@ export default new function () {
     self.measure_geometry = function () {
         var frame = $("#InnerFrame")[0];
         var tbody = self.tbody_el[0];
-        var first_row = tbody.firstElementChild;
+        // With a filter active the hidden rows take up no space, so only
+        // the visible ones count towards the measurements
+        var first_row = self.filtering ?
+            tbody.querySelector("tr:not(.filtered_out)") :
+            tbody.firstElementChild;
+        var row_count = self.filtering ?
+            tbody.querySelectorAll("tr:not(.filtered_out)").length :
+            tbody.childElementCount;
 
         // The row height must keep its fractional part (offsetHeight rounds
         // to an integer): index * height accumulates the rounding error to
@@ -763,9 +775,8 @@ export default new function () {
         // on a followed row. Averaging over the whole body also irons out
         // per-row rounding of borders.
         var row_height = 0;
-        if (first_row !== null) {
-            row_height = tbody.getBoundingClientRect().height /
-                         tbody.childElementCount;
+        if (row_count > 0) {
+            row_height = tbody.getBoundingClientRect().height / row_count;
         }
 
         var frame_rect = frame.getBoundingClientRect();
@@ -795,6 +806,14 @@ export default new function () {
                user["index"] * self.geometry["row_height"];
     };
 
+    // Like row_offset, but valid with a filter active too: hidden rows keep
+    // their sorted index, so indexes then no longer map to positions and the
+    // layout is read instead (the filtered table is small, which keeps the
+    // forced reflow affordable)
+    self.row_top = function (user) {
+        return self.filtering ? user["row"].offsetTop : self.row_offset(user);
+    };
+
     // The currently visible vertical span, in row-offset coordinates. Call
     // it before mutating the DOM, while the layout is still clean.
     self.visible_range = function () {
@@ -810,9 +829,11 @@ export default new function () {
     };
 
     self.is_row_visible = function (user, range) {
-        // With a filter active the indexes don't map to positions (hidden
-        // rows still hold an index), so fall back to reading the layout
-        var top = self.filtering ? user["row"].offsetTop : self.row_offset(user);
+        // A hidden row reads offsetTop 0, which could pass the range check
+        if (self.is_filtered_out(user)) {
+            return false;
+        }
+        var top = self.row_top(user);
         return top + self.geometry["row_height"] > range["top"] &&
                top < range["bottom"];
     };
@@ -886,10 +907,11 @@ export default new function () {
         }
         var geometry = self.geometry;
         var top = geometry["frame_top"] +
-                  self.row_offset(entry["user"]) + geometry["table_top"] -
+                  self.row_top(entry["user"]) + geometry["table_top"] -
                   geometry["frame"].scrollTop +
                   geometry["row_height"] / 2;
-        var visible = top > geometry["frame_top"] &&
+        var visible = !self.is_filtered_out(entry["user"]) &&
+                      top > geometry["frame_top"] &&
                       top < geometry["frame_bottom"];
 
         // The badge's right edge sits at the gutter, vertically centered

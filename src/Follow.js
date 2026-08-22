@@ -256,15 +256,20 @@ export default new function () {
         self.set_active(self.filtered.length > 0 ? 0 : -1, true);
     };
 
+    // The active element is remembered directly: the index alone would go
+    // stale when the filtered list is rebuilt under it, leaving the class
+    // on the previous list's element
     self.set_active = function (idx, scroll) {
-        if (self.active_idx >= 0 && self.active_idx < self.filtered.length) {
-            self.filtered[self.active_idx]["el"].removeClass("active");
+        if (self.active_el !== undefined) {
+            self.active_el.removeClass("active");
+            self.active_el = undefined;
         }
 
         self.active_idx = idx;
 
         if (idx >= 0 && idx < self.filtered.length) {
             var el = self.filtered[idx]["el"];
+            self.active_el = el;
             el.addClass("active");
             if (scroll) {
                 el[0].scrollIntoView({"block": "nearest"});
@@ -335,7 +340,7 @@ export default new function () {
         }
 
         var target = Math.round(
-            geometry["table_top"] + Scoreboard.row_offset(user) +
+            geometry["table_top"] + Scoreboard.row_top(user) +
             (geometry["row_height"] - geometry["frame_height"]) / 2);
 
         // Compare against where the frame actually is, not against the last
