@@ -281,12 +281,12 @@ export default new function () {
         // Flashes and badges can't be read at high playback speeds, so they
         // switch off there; they also switch off when the viewport shows a
         // huge number of rows at once (a phone with the page zoomed out to
-        // fit), where animating them all is too expensive to be smooth;
-        // rows only slide on discrete jumps (steps, seeks, released scrubs),
-        // where a single reorder can be followed
+        // fit), where animating them all is too expensive to be smooth.
+        // Rows slide on discrete jumps and while scrubbing, but not during
+        // playback, where the constant reordering can't be followed anyway
         var effects = (!self.playing || SPEEDS[self.speed_idx] <= 4) &&
                       Scoreboard.visible_row_count(range) <= MAX_EFFECT_ROWS;
-        var slide = effects && !self.playing && !self.scrubbing;
+        var slide = !self.playing;
 
         // Ranks in the currently displayed sorting, snapshotted before the
         // events mutate any scores, so the rank-delta badges reflect the
