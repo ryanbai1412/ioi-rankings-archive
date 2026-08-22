@@ -66,7 +66,34 @@ function patchHtmlPlugin() {
         name: "patch-ioi-html",
 
         transformIndexHtml(src, ctx) {
-            return transformIndexHtml(src, ctx.path);
+            src = transformIndexHtml(src, ctx.path) ?? src;
+
+            // The year's data chunk is only dynamically imported (so it
+            // doesn't block hydration), which means Vite doesn't emit a
+            // modulepreload for it; inject one so the browser starts the
+            // download at parse time
+            const year = ctx.path.match(/\/ioi-(\d{4})\/index.html$/)?.[1];
+            if (year !== undefined && ctx.bundle !== undefined) {
+                for (const chunk of Object.values(ctx.bundle)) {
+                    if (chunk.type === "chunk" &&
+                        chunk.facadeModuleId?.endsWith(`ioi-${year}/data.json`)) {
+                        return {
+                            html: src,
+                            tags: [{
+                                tag: "link",
+                                attrs: {
+                                    rel: "modulepreload",
+                                    crossorigin: true,
+                                    href: `/${chunk.fileName}`,
+                                },
+                                injectTo: "head",
+                            }],
+                        };
+                    }
+                }
+            }
+
+            return src;
         },
 
         transform: transformIndexHtml,

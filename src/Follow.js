@@ -50,34 +50,9 @@ export default new function () {
             return;
         }
 
-        var eye_svg =
-            "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\">" +
-            "<path class=\"Follow_eye_body\" d=\"M12 5.5 C6.5 5.5 2.5 10.5 1.3 12 C2.5 13.5 6.5 18.5 12 18.5 C17.5 18.5 21.5 13.5 22.7 12 C21.5 10.5 17.5 5.5 12 5.5 Z\"/>" +
-            "<circle class=\"Follow_eye_pupil\" cx=\"12\" cy=\"12\" r=\"3.2\"/>" +
-            "</svg>";
-
-        var chevron_svg =
-            "<svg class=\"Follow_chevron\" viewBox=\"0 0 24 24\" aria-hidden=\"true\">" +
-            "<path d=\"M6 9l6 6 6-6\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>" +
-            "</svg>";
-
-        timeline.append(
-            "<div id=\"Follow\">" +
-            "<button id=\"Follow_eye\" type=\"button\">" + eye_svg + "</button>" +
-            "<div id=\"Follow_picker\">" +
-            "<button id=\"Follow_toggle\" type=\"button\" title=\"Follow a contestant\">" +
-            "<span id=\"Follow_toggle_label\"></span>" + chevron_svg +
-            "</button>" +
-            "<div id=\"Follow_menu\">" +
-            "<input id=\"Follow_search\" type=\"text\"" +
-            " placeholder=\"Search by name, ID or team\u2026\"" +
-            " autocomplete=\"off\" spellcheck=\"false\"/>" +
-            "<button id=\"Follow_clear\" type=\"button\">\u2715&ensp;Stop following</button>" +
-            "<div id=\"Follow_list\"></div>" +
-            "<div id=\"Follow_empty\">No contestants match</div>" +
-            "</div>" +
-            "</div>" +
-            "</div>");
+        // The markup lives in index.html so the pre-load skeleton keeps the
+        // real layout; it just needs enabling
+        $("#Follow_eye, #Follow_toggle").prop("disabled", false);
 
         self.follow_el = $("#Follow");
         self.eye_el = $("#Follow_eye");

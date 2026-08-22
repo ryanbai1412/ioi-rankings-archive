@@ -35,9 +35,11 @@
             <script src="/lib/explorercanvas.js"></script>
         <![endif]-->
         <script type="module">
-            import data from "./data.json";
-
-            window.data = data;
+            // Loaded lazily so the UI shell can initialize (and render the
+            // greyed-out skeleton) while the data downloads
+            window.data_promise = import("./data.json").then(function (m) {
+                window.data = m.default;
+            });
         </script>
         <script type="module" src="../index.js"></script>
         <title>IOI Rankings</title>
@@ -56,7 +58,7 @@
                     </div>
                 </a>
                 <div id="Settings_box">
-                    <button id="Settings_button" type="button" title="Display settings"></button>
+                    <button id="Settings_button" type="button" title="Display settings"><svg viewBox='0 0 24 24' width='16' height='16' fill='currentColor'><path d='M19.14 12.94a7.07 7.07 0 0 0 0-1.88l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.61-.22l-2.39.96a7.03 7.03 0 0 0-1.63-.94l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.5.42l-.36 2.54c-.59.24-1.13.56-1.63.94l-2.39-.96a.5.5 0 0 0-.61.22L2.71 8.84a.5.5 0 0 0 .12.64l2.03 1.58a7.07 7.07 0 0 0 0 1.88l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.13.23.4.32.61.22l2.39-.96c.5.38 1.04.7 1.63.94l.36 2.54a.5.5 0 0 0 .5.42h3.84a.5.5 0 0 0 .5-.42l.36-2.54a7.03 7.03 0 0 0 1.63-.94l2.39.96c.21.1.48.01.61-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58zM12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7z'/></svg></button>
                     <div id="Settings_panel">
                         <div id="Settings_title">Display settings</div>
                         <div class="Settings_row">
@@ -109,17 +111,29 @@
                     Powered by <a style="color: #00A3DA; text-decoration: none;" href="https://cms-dev.github.io/" target="_blank">CMS</a>
                 </div>
             </div>
-            <div id="Timeline">
+            <div id="Timeline" class="loading">
                 <div id="Timeline_track" title="Scrub through the contest">
-                    <input id="Timeline_slider" type="range"/>
+                    <input id="Timeline_slider" type="range" min="0" max="100000" value="100000" disabled/>
                     <div id="Timeline_ticks"></div>
                 </div>
-                <div id="Timeline_label"></div>
+                <div id="Timeline_label">Final</div>
                 <div id="Timeline_controls">
-                    <button id="Timeline_prev" type="button"></button>
-                    <button id="Timeline_play" type="button"></button>
-                    <button id="Timeline_next" type="button"></button>
-                    <button id="Timeline_speed" type="button" title="Playback speed"></button>
+                    <button id="Timeline_prev" type="button" title="Seek to the previous day" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6h2v12H6z M18 6l-8.5 6 8.5 6z"/></svg></button>
+                    <button id="Timeline_play" type="button" title="Play (Space/K)" disabled><svg class="icon_play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg><svg class="icon_pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h4v14H6z M14 5h4v14h-4z"/></svg></button>
+                    <button id="Timeline_next" type="button" title="Seek to the next day" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l8.5 6L6 18z M16 6h2v12h-2z"/></svg></button>
+                    <button id="Timeline_speed" type="button" title="Playback speed" disabled>1&#xD7;</button>
+                </div>
+                <div id="Follow">
+                    <button id="Follow_eye" type="button" class="disabled" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path class="Follow_eye_body" d="M12 5.5 C6.5 5.5 2.5 10.5 1.3 12 C2.5 13.5 6.5 18.5 12 18.5 C17.5 18.5 21.5 13.5 22.7 12 C21.5 10.5 17.5 5.5 12 5.5 Z"/><circle class="Follow_eye_pupil" cx="12" cy="12" r="3.2"/></svg></button>
+                    <div id="Follow_picker">
+                        <button id="Follow_toggle" type="button" title="Follow a contestant" disabled><span id="Follow_toggle_label">Follow a contestant&#x2026;</span><svg class="Follow_chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+                        <div id="Follow_menu">
+                            <input id="Follow_search" type="text" placeholder="Search by name, ID or team&#x2026;" autocomplete="off" spellcheck="false"/>
+                            <button id="Follow_clear" type="button">&#x2715;&ensp;Stop following</button>
+                            <div id="Follow_list"></div>
+                            <div id="Follow_empty">No contestants match</div>
+                        </div>
+                    </div>
                 </div>
             </div>
             <div id="InnerFrame">

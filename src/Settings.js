@@ -36,21 +36,6 @@ export default new function () {
 
     const ANIMATION_SETTINGS = ["rank_deltas", "rank_drops", "score_flashes"];
 
-    // Inline SVG gear: Unicode gear glyphs render differently per font, and
-    // mobile platforms show them as color emoji
-    const GEAR_ICON =
-        "<svg viewBox='0 0 24 24' width='16' height='16' fill='currentColor'>" +
-        "<path d='M19.14 12.94a7.07 7.07 0 0 0 0-1.88l2.03-1.58a.5.5 0 0 0" +
-        " .12-.64l-1.92-3.32a.5.5 0 0 0-.61-.22l-2.39.96a7.03 7.03 0 0 0" +
-        "-1.63-.94l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.5.42l" +
-        "-.36 2.54c-.59.24-1.13.56-1.63.94l-2.39-.96a.5.5 0 0 0-.61.22L" +
-        "2.71 8.84a.5.5 0 0 0 .12.64l2.03 1.58a7.07 7.07 0 0 0 0 1.88l" +
-        "-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.13.23.4.32.61.22l2.39" +
-        "-.96c.5.38 1.04.7 1.63.94l.36 2.54a.5.5 0 0 0 .5.42h3.84a.5.5 0" +
-        " 0 0 .5-.42l.36-2.54a7.03 7.03 0 0 0 1.63-.94l2.39.96c.21.1.48" +
-        ".01.61-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58zM12 15.5A3.5" +
-        " 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7z'/></svg>";
-
     self.init = function () {
         self.stored = self.load(STORAGE_KEY) || {};
         self.change_callbacks = [];
@@ -58,7 +43,7 @@ export default new function () {
         self.box_el = $("#Settings_box");
         self.panel_el = $("#Settings_panel");
 
-        $("#Settings_button").html(GEAR_ICON).on("click", function (event) {
+        $("#Settings_button").on("click", function (event) {
             event.stopPropagation();
             self.box_el.toggleClass("open");
         });

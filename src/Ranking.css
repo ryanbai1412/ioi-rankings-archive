@@ -355,6 +355,44 @@ abbr {
     border-color: #0F33CC;
 }
 
+/* Pre-load skeleton: the timeline renders with its real layout while the
+   data downloads, just greyed out and inert */
+#Timeline_controls button:disabled,
+#Timeline_controls button:disabled:hover,
+#Follow_eye:disabled,
+#Follow_eye:disabled:hover,
+#Follow_toggle:disabled,
+#Follow_toggle:disabled:hover {
+    border-color: #b1b1b1;
+    color: #b1b1b1;
+    background-color: #FFFFFF;
+    cursor: default;
+}
+
+#Timeline.loading #Timeline_track {
+    cursor: default;
+}
+
+#Timeline.loading #Timeline_label {
+    color: #b1b1b1;
+}
+
+#Timeline.loading #Timeline_slider::-webkit-slider-runnable-track {
+    background: #D2D2D6;
+}
+
+#Timeline.loading #Timeline_slider::-webkit-slider-thumb {
+    background-color: #b1b1b1;
+}
+
+#Timeline.loading #Timeline_slider::-moz-range-progress {
+    background-color: #D2D2D6;
+}
+
+#Timeline.loading #Timeline_slider::-moz-range-thumb {
+    background-color: #b1b1b1;
+}
+
 #Follow_eye.locked:hover .Follow_eye_pupil {
     fill: #0F33CC;
 }

@@ -58,16 +58,22 @@ $(document).ready(function() {
 
     Settings.init();
 
-    DataStore.init(function() {
-        HistoryStore.init();
-        UserDetail.init();
-        TimeView.init();
-        TeamSearch.init(function() {
-          DataStore.init_selections();
+    // The data is imported lazily (see the module script in index.html), so
+    // the page shell above renders right away and hydrates when it arrives
+    window.data_promise.then(function () {
+        DataStore.init(function() {
+            HistoryStore.init();
+            UserDetail.init();
+            TimeView.init();
+            TeamSearch.init(function() {
+              DataStore.init_selections();
+            });
+            Overview.init();
+            Scoreboard.init();
+            Timeline.init();
+            Follow.init();
         });
-        Overview.init();
-        Scoreboard.init();
-        Timeline.init();
-        Follow.init();
+    }, function () {
+        $("#LoadError").show();
     });
 });

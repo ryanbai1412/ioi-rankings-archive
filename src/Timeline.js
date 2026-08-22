@@ -46,15 +46,6 @@ const SLOW_FRAME_LIMIT = 10;
 // into one badge rather than a stream of tiny ones
 const DROP_WINDOW_MS = 20000;
 
-// Inline SVG control icons: Unicode glyphs like U+23EE render differently
-// per font, and mobile platforms show them as color emoji
-const ICONS = {
-    "play": "<svg class=\"icon_play\" viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M8 5v14l11-7z\"/></svg>",
-    "pause": "<svg class=\"icon_pause\" viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M6 5h4v14H6z M14 5h4v14h-4z\"/></svg>",
-    "prev": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M6 6h2v12H6z M18 6l-8.5 6 8.5 6z\"/></svg>",
-    "next": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M6 6l8.5 6L6 18z M16 6h2v12h-2z\"/></svg>"
-};
-
 function round(value, ndigits) {
     var factor = Math.pow(10, ndigits);
     return Math.round(value * factor) / factor;
@@ -174,10 +165,10 @@ export default new function () {
             self.update_ui();
         });
 
-        $("#Timeline_prev").html(ICONS["prev"]).attr("title", "Seek to the previous day");
-        $("#Timeline_next").html(ICONS["next"]).attr("title", "Seek to the next day");
-        // Both icons are in the button; CSS shows one based on .playing
-        $("#Timeline_play").html(ICONS["play"] + ICONS["pause"]);
+        // Until now the markup was the greyed-out pre-load skeleton
+        // (identical geometry, everything disabled)
+        $("#Timeline").removeClass("loading");
+        $("#Timeline_controls button").prop("disabled", false);
 
         $(document).on("keydown", function (event) {
             // Leave typing alone (e.g. the team search box); the slider is
