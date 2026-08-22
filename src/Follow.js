@@ -13,6 +13,7 @@
 import $ from "jquery";
 import Config from "./Config.js";
 import DataStore from "./DataStore.js";
+import Scoreboard from "./Scoreboard.js";
 
 var escape_map = {
     "&": "&amp;",
@@ -332,10 +333,23 @@ export default new function () {
             return;
         }
 
-        var $row = $(user["row"]);
-        var target = $row.offset().top - self.frame_el.offset().top +
-            self.frame_el.scrollTop() +
-            $row.height() / 2 - self.frame_el.height() / 2;
+        // Computed from Scoreboard's cached geometry, not by reading the
+        // row's layout: recenter runs on every replay tick, right after the
+        // scoreboard was reordered, so a layout read here would force a
+        // full reflow of the table
+        var geometry = Scoreboard.geometry;
+        if (geometry === undefined) {
+            Scoreboard.measure_geometry();
+            geometry = Scoreboard.geometry;
+        }
+
+        var target = Math.round(
+            geometry["table_top"] + Scoreboard.row_offset(user) +
+            (geometry["row_height"] - geometry["frame_height"]) / 2);
+
+        if (target === self.expected_scroll) {
+            return;
+        }
 
         self.frame_el.scrollTop(target);
         // Read back the actual value (the browser clamps it) so that the

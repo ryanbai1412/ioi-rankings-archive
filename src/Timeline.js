@@ -20,8 +20,10 @@ const SPEEDS = [1, 2, 4, 8, 16];
 // Contest seconds per real second at 1x, so that a 5 hour day lasts a minute
 const BASE_RATE = 300;
 
-// Don't recompute the scoreboard more often than this while playing (in ms)
+// Bounds for how often the scoreboard is recomputed while playing (in ms):
+// the actual pace adapts between them to what the device can render
 const MIN_FRAME_INTERVAL = 60;
+const MAX_FRAME_INTERVAL = 500;
 
 // Scrubbing to within this many pixels of a tick snaps to it
 const SNAP_PIXELS = 12;
@@ -61,6 +63,10 @@ export default new function () {
     self.resume_after_scrub = false;
     // Set when playback skipped an overview redraw, to catch up on pause
     self.overview_stale = false;
+
+    // Adaptive throttle for the scoreboard updates (see on_frame)
+    self.apply_interval = MIN_FRAME_INTERVAL;
+    self.applied_last_frame = false;
 
     self.init = function () {
         self.contests = DataStore.contest_list;
@@ -230,7 +236,11 @@ export default new function () {
             var next = round(score, task["score_precision"]);
             last_score[key] = next;
 
+            // The user object and the property to poke are resolved once
+            // here: the apply loops run over thousands of events per tick
             self.events.push({"user": u_id, "task": t_id, "time": time,
+                              "user_obj": DataStore.users[u_id],
+                              "t_key": "t_" + t_id, "key": key,
                               "score": next, "prev_score": prev});
         }
 
@@ -260,30 +270,35 @@ export default new function () {
         // events mutate any scores, so the rank-delta badges reflect the
         // active column rather than always the global standings
         var old_ranks = effects ? Scoreboard.get_local_ranks() : null;
+        // Read the viewport now, while the layout is still clean: doing it
+        // after the writes below would force a synchronous reflow
+        var range = effects ? Scoreboard.visible_range() : null;
 
         while (self.applied < self.events.length &&
                self.events[self.applied]["time"] <= time) {
             var event = self.events[self.applied];
-            DataStore.users[event["user"]]["t_" + event["task"]] = event["score"];
+            event["user_obj"][event["t_key"]] = event["score"];
             dirty[event["user"]] = true;
-            var key = event["user"] + "/" + event["task"];
-            if (!(key in first_score)) {
-                first_score[key] = event["prev_score"];
+            if (effects) {
+                if (!(event["key"] in first_score)) {
+                    first_score[event["key"]] = event["prev_score"];
+                }
+                last_score[event["key"]] = event["score"];
             }
-            last_score[key] = event["score"];
             self.applied += 1;
         }
 
         while (self.applied > 0 && self.events[self.applied - 1]["time"] > time) {
             self.applied -= 1;
             var event = self.events[self.applied];
-            DataStore.users[event["user"]]["t_" + event["task"]] = event["prev_score"];
+            event["user_obj"][event["t_key"]] = event["prev_score"];
             dirty[event["user"]] = true;
-            var key = event["user"] + "/" + event["task"];
-            if (!(key in first_score)) {
-                first_score[key] = event["score"];
+            if (effects) {
+                if (!(event["key"] in first_score)) {
+                    first_score[event["key"]] = event["score"];
+                }
+                last_score[event["key"]] = event["prev_score"];
             }
-            last_score[key] = event["prev_score"];
         }
 
         if ($.isEmptyObject(dirty)) {
@@ -305,8 +320,6 @@ export default new function () {
         // Ranks (and thus the order) may have changed for everyone
         Scoreboard.sort();
 
-        // Recenter on the followed user first: what counts as visible for
-        // the effects below depends on where the view ends up
         Follow.recenter();
 
         if (measured !== null) {
@@ -314,8 +327,6 @@ export default new function () {
         }
 
         if (effects) {
-            var range = Scoreboard.visible_range();
-
             for (var key in last_score) {
                 var sep = key.indexOf("/");
                 var user = DataStore.users[key.slice(0, sep)];
@@ -416,7 +427,7 @@ export default new function () {
         var position = self.snap((client_x - rect.left - 7) / travel);
 
         var now = performance.now();
-        var skip = !finish && now - self.last_scrub_apply < MIN_FRAME_INTERVAL;
+        var skip = !finish && now - self.last_scrub_apply < self.apply_interval;
         if (!skip) {
             self.last_scrub_apply = now;
         }
@@ -530,11 +541,20 @@ export default new function () {
         var delta = timestamp - self.last_frame;
         self.last_frame = timestamp;
 
-        // The thumb and the label move every frame, but the scoreboard is
-        // only recomputed at a throttled pace since that's expensive
-        var apply = timestamp - self.last_apply >= MIN_FRAME_INTERVAL;
+        // How long the frame containing the last scoreboard update took
+        // tells us what this device can afford, so the update pace adapts
+        // to it: fast machines get MIN_FRAME_INTERVAL, slow ones update the
+        // scoreboard less often but keep the thumb and label smooth
+        if (self.applied_last_frame) {
+            self.applied_last_frame = false;
+            self.apply_interval = Math.min(
+                Math.max(delta * 2, MIN_FRAME_INTERVAL), MAX_FRAME_INTERVAL);
+        }
+
+        var apply = timestamp - self.last_apply >= self.apply_interval;
         if (apply) {
             self.last_apply = timestamp;
+            self.applied_last_frame = true;
         }
 
         self.advance(delta / 1000 * BASE_RATE * SPEEDS[self.speed_idx], !apply);

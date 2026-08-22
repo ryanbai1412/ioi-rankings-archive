@@ -1308,28 +1308,9 @@ abbr {
    The animation stuff ends here.
  */
 
-/* Playback effects: flashes on changed score cells, rank-delta badges and
-   sliding rows, triggered by the timeline while replaying the contest.
-   The flash is an inset shadow so the cell's own background shows through
-   as it fades. */
-
-#Scoreboard_body td.cell_up {
-    animation: cell_up 0.5s ease-out;
-}
-
-#Scoreboard_body td.cell_down {
-    animation: cell_down 0.5s ease-out;
-}
-
-@keyframes cell_up {
-    from {box-shadow: inset 0 0 0 2em rgba(138, 226, 52, 0.65);}
-    to {box-shadow: inset 0 0 0 2em rgba(138, 226, 52, 0);}
-}
-
-@keyframes cell_down {
-    from {box-shadow: inset 0 0 0 2em rgba(239, 41, 41, 0.65);}
-    to {box-shadow: inset 0 0 0 2em rgba(239, 41, 41, 0);}
-}
+/* Playback effects: rank-delta badges and sliding rows, triggered by the
+   timeline while replaying the contest (the flashes on changed score cells
+   are Web Animations, see Scoreboard.flash_cell). */
 
 #Scoreboard_body td.rank {
     position: relative;

@@ -53,6 +53,11 @@ export default new function () {
         DataStore.user_delete.add(self.delete_user);
 
         DataStore.select_events.add(self.select_handler);
+
+        // The cached table geometry is only valid for the current layout
+        $(window).on("resize", function () {
+            self.geometry = undefined;
+        });
     };
 
 
@@ -507,29 +512,69 @@ export default new function () {
         $rank.children(".rank_label").text(text);
     }
 
-    // Rewrite all the score cells of the given user
+    // Rewrite the score cells of the given user that actually changed. The
+    // cells and their static parameters are resolved once per user, and the
+    // last written score is remembered, since this runs for every dirty user
+    // on every replay tick.
     self.refresh_user = function (user) {
-        $(user["row"]).children("td.score").each(function () {
-            var $this = $(this);
-            var score = user[$this.data("sort_key")];
-            var max_score;
+        if (user["score_cells"] === undefined) {
+            user["score_cells"] = [];
+            $(user["row"]).children("td.score").each(function () {
+                var $this = $(this);
+                var precision, max_score;
 
-            if ($this.hasClass("global")) {
-                max_score = DataStore.global_max_score;
-                $this.text(round_to_str(score, DataStore.global_score_precision));
-            } else if ($this.hasClass("contest")) {
-                var contest = DataStore.contests[$this.data("contest")];
-                max_score = contest["max_score"];
-                $this.text(round_to_str(score, contest["score_precision"]));
-            } else if ($this.hasClass("task")) {
-                var task = DataStore.tasks[$this.data("task")];
-                max_score = task["max_score"];
-                $this.text(round_to_str(score, task["score_precision"]));
+                if ($this.hasClass("global")) {
+                    precision = DataStore.global_score_precision;
+                    max_score = DataStore.global_max_score;
+                } else if ($this.hasClass("contest")) {
+                    var contest = DataStore.contests[$this.data("contest")];
+                    precision = contest["score_precision"];
+                    max_score = contest["max_score"];
+                } else {
+                    var task = DataStore.tasks[$this.data("task")];
+                    precision = task["score_precision"];
+                    max_score = task["max_score"];
+                }
+
+                // The heatmap class the cell currently carries; the score is
+                // left unknown so that the first pass rewrites every cell
+                var score_class = null;
+                for (const cls of this.classList) {
+                    if (cls.lastIndexOf("score_", 0) == 0) {
+                        score_class = cls;
+                        break;
+                    }
+                }
+
+                user["score_cells"].push({
+                    "cell": this,
+                    "sort_key": $this.data("sort_key"),
+                    "precision": precision,
+                    "max_score": max_score,
+                    "score": null,
+                    "score_class": score_class
+                });
+            });
+        }
+
+        for (const entry of user["score_cells"]) {
+            var score = user[entry["sort_key"]];
+            if (score === entry["score"]) {
+                continue;
+            }
+            entry["score"] = score;
+
+            var score_class = self.get_score_class(score, entry["max_score"]);
+            if (score_class !== entry["score_class"]) {
+                if (entry["score_class"] !== null) {
+                    entry["cell"].classList.remove(entry["score_class"]);
+                }
+                entry["cell"].classList.add(score_class);
+                entry["score_class"] = score_class;
             }
 
-            $this.removeClass("score_0 score_0_10 score_10_20 score_20_30 score_30_40 score_40_50 score_50_60 score_60_70 score_70_80 score_80_90 score_90_100 score_100");
-            $this.addClass(self.get_score_class(score, max_score));
-        });
+            entry["cell"].textContent = round_to_str(score, entry["precision"]);
+        }
     }
 
     // Sort the scoreboard using the column with the given index.
@@ -694,39 +739,78 @@ export default new function () {
     // replaying the contest: a flash on a score cell that changed, a little
     // rank-delta badge, and rows sliding to their new position (FLIP).
 
-    // The currently visible vertical span, in row-offsetTop coordinates
-    // (i.e. relative to the table, which is what tr.offsetTop yields)
-    self.visible_range = function () {
+    // Row positions are computed from the sorted index and a once-measured
+    // row height instead of reading tr.offsetTop: layout reads between the
+    // DOM writes of a replay tick force a synchronous reflow of the whole
+    // table, which dominated the profile on slow devices
+    self.measure_geometry = function () {
         var frame = $("#InnerFrame")[0];
-        var table_top = $("#Scoreboard")[0].offsetTop;
+        var first_row = self.tbody_el[0].firstElementChild;
 
+        self.geometry = {
+            "table_top": $("#Scoreboard")[0].offsetTop,
+            "row_base": first_row !== null ? first_row.offsetTop : 0,
+            "row_height": first_row !== null ? first_row.offsetHeight : 0,
+            "frame": frame,
+            "frame_height": frame.clientHeight
+        };
+    };
+
+    // The offset of the user's row from the top of the table
+    self.row_offset = function (user) {
+        return self.geometry["row_base"] +
+               user["index"] * self.geometry["row_height"];
+    };
+
+    // The currently visible vertical span, in row-offset coordinates. Call
+    // it before mutating the DOM, while the layout is still clean.
+    self.visible_range = function () {
+        if (self.geometry === undefined) {
+            self.measure_geometry();
+        }
+
+        var top = self.geometry["frame"].scrollTop - self.geometry["table_top"];
         return {
-            "top": frame.scrollTop - table_top,
-            "bottom": frame.scrollTop + frame.clientHeight - table_top
+            "top": top,
+            "bottom": top + self.geometry["frame_height"]
         };
     };
 
     self.is_row_visible = function (user, range) {
-        var row = user["row"];
-        return row.offsetTop + row.offsetHeight > range["top"] &&
-               row.offsetTop < range["bottom"];
+        // With a filter active the indexes don't map to positions (hidden
+        // rows still hold an index), so fall back to reading the layout
+        var top = self.filtering ? user["row"].offsetTop : self.row_offset(user);
+        return top + self.geometry["row_height"] > range["top"] &&
+               top < range["bottom"];
     };
 
-    // One-shot flash on the task cell whose score just changed
+    // One-shot flash on the task cell whose score just changed. The flash
+    // is an inset shadow so the cell's own background shows through as it
+    // fades; it's driven with the Web Animations API since restarting a CSS
+    // animation needs a forced reflow, which is far too slow to do per cell
+    // per replay tick.
     self.flash_cell = function (user, t_id, direction) {
-        var cell = $(user["row"]).children("td.task[data-task=" + t_id + "]")[0];
-        if (cell === undefined) {
+        var cells = user["score_cells"];
+        if (cells === undefined) {
             return;
         }
 
-        var cls = direction > 0 ? "cell_up" : "cell_down";
-        if (cell.classList.contains(cls)) {
-            cell.classList.remove(cls);
-            // Force a reflow so that re-adding the class restarts the flash
-            void cell.offsetWidth;
+        var sort_key = "t_" + t_id;
+        for (const entry of cells) {
+            if (entry["sort_key"] !== sort_key) {
+                continue;
+            }
+
+            var color = direction > 0 ? "138, 226, 52" : "239, 41, 41";
+            if (entry["flash"] !== undefined) {
+                entry["flash"].cancel();
+            }
+            entry["flash"] = entry["cell"].animate([
+                {"boxShadow": "inset 0 0 0 2em rgba(" + color + ", 0.65)"},
+                {"boxShadow": "inset 0 0 0 2em rgba(" + color + ", 0)"}
+            ], {"duration": 500, "easing": "ease-out"});
+            return;
         }
-        cell.classList.remove("cell_up", "cell_down");
-        cell.classList.add(cls);
     };
 
     // Show a fading "climbed/dropped n places" badge in the gutter left of
