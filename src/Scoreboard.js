@@ -546,8 +546,15 @@ export default new function () {
                     }
                 }
 
+                // The score lives in its own text node so the flash overlay
+                // (a sibling inside the cell) survives score rewrites
+                var text_node = document.createTextNode(this.textContent);
+                this.textContent = "";
+                this.appendChild(text_node);
+
                 user["score_cells"].push({
                     "cell": this,
+                    "text_node": text_node,
                     "sort_key": $this.data("sort_key"),
                     "precision": precision,
                     "max_score": max_score,
@@ -573,7 +580,7 @@ export default new function () {
                 entry["score_class"] = score_class;
             }
 
-            entry["cell"].textContent = round_to_str(score, entry["precision"]);
+            entry["text_node"].data = round_to_str(score, entry["precision"]);
         }
     }
 
@@ -804,10 +811,10 @@ export default new function () {
     };
 
     // One-shot flash on the task cell whose score just changed. The flash
-    // is an inset shadow so the cell's own background shows through as it
-    // fades; it's driven with the Web Animations API since restarting a CSS
-    // animation needs a forced reflow, which is far too slow to do per cell
-    // per replay tick.
+    // is an absolutely positioned overlay whose only animated property is
+    // opacity, so the whole fade runs on the compositor with no per-frame
+    // repaint (animating the cell's own background or shadow repaints on
+    // the CPU every frame, which is too slow with many visible cells).
     self.flash_cell = function (user, t_id, direction) {
         var cells = user["score_cells"];
         if (cells === undefined) {
@@ -820,13 +827,22 @@ export default new function () {
                 continue;
             }
 
-            var color = direction > 0 ? "138, 226, 52" : "239, 41, 41";
+            var overlay = entry["overlay"];
+            if (overlay === undefined) {
+                overlay = document.createElement("span");
+                overlay.className = "cell_flash";
+                entry["cell"].appendChild(overlay);
+                entry["overlay"] = overlay;
+            }
+
+            overlay.style.backgroundColor =
+                direction > 0 ? "rgb(138, 226, 52)" : "rgb(239, 41, 41)";
             if (entry["flash"] !== undefined) {
                 entry["flash"].cancel();
             }
-            entry["flash"] = entry["cell"].animate([
-                {"boxShadow": "inset 0 0 0 2em rgba(" + color + ", 0.65)"},
-                {"boxShadow": "inset 0 0 0 2em rgba(" + color + ", 0)"}
+            entry["flash"] = overlay.animate([
+                {"opacity": 0.65},
+                {"opacity": 0}
             ], {"duration": 500, "easing": "ease-out"});
             return;
         }

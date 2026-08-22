@@ -284,8 +284,7 @@ export default new function () {
         // fit), where animating them all is too expensive to be smooth;
         // rows only slide on discrete jumps (steps, seeks, released scrubs),
         // where a single reorder can be followed
-        var effects = (!self.playing || SPEEDS[self.speed_idx] <= 4) &&
-                      Scoreboard.visible_row_count(range) <= MAX_EFFECT_ROWS;
+        var effects = !self.playing || SPEEDS[self.speed_idx] <= 4;
         var slide = effects && !self.playing && !self.scrubbing;
 
         // Ranks in the currently displayed sorting, snapshotted before the
