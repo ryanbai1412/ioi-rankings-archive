@@ -75,14 +75,6 @@ export default new function () {
             self.set(this.dataset["setting"], this.checked);
         });
 
-        // Multi-choice settings (the temporary rank-badge experiments)
-        self.panel_el.find("select[data-choice]").each(function () {
-            this.value = self.get_choice(this.dataset["choice"],
-                                         this.options[0].value);
-        }).on("change", function () {
-            self.set_choice(this.dataset["choice"], this.value);
-        });
-
         // The info buttons show their explanation in a shared tooltip area
         // at the bottom of the panel; clicking the same button again (or
         // another one) hides or replaces it. Click-based so it also works
@@ -133,18 +125,6 @@ export default new function () {
             return false;
         }
         return self.default_value(name);
-    };
-
-    // Multi-choice settings, stored as their raw string value
-    self.get_choice = function (name, fallback) {
-        var stored = self.stored[name];
-        return stored === undefined ? fallback : stored;
-    };
-
-    self.set_choice = function (name, value) {
-        self.stored[name] = value;
-        self.save(STORAGE_KEY, self.stored);
-        self.notify(name);
     };
 
     self.is_explicit = function (name) {

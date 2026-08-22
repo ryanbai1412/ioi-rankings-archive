@@ -64,9 +64,6 @@ export default new function () {
             if (name === "global_ranks") {
                 self.update_ranks();
             }
-            if (name === "diag") {
-                self.apply_diag();
-            }
         });
     };
 
@@ -262,7 +259,6 @@ export default new function () {
         }
 
         self.sort();
-        self.apply_diag();
     };
 
 
@@ -316,7 +312,7 @@ export default new function () {
         var result = " \
 <tr class=\"user" + (user["selected"] > 0 ? " selected color" + user["selected"] : "") + (self.is_filtered_out(user) ? " filtered_out" : "") + "\" data-user=\"" + user["key"] + "\"> \
     <td class=\"sel\"></td> \
-    <td class=\"rank medal-" + Config.get_medal(user["rank"]) + "\"><span class=\"rank_label\">" + self.format_rank(user) + "</span><span class=\"rank_delta\"></span></td> \
+    <td class=\"rank medal-" + Config.get_medal(user["rank"]) + "\"><span class=\"rank_label\">" + self.format_rank(user) + "</span></td> \
     <td colspan=\"10\" class=\"f_name\">" + escapeHTML(user["f_name"]) + "</td> \
     <td colspan=\"10\" class=\"l_name\">" + escapeHTML(user["l_name"]) + "</td> \
     <td class=\"user_id\">" + user["display_key"] + "</td>";
@@ -590,14 +586,6 @@ export default new function () {
 
     // Sort the scoreboard using the column with the given index.
     self.sort = function () {
-        // Diagnostic mode: rank changes leave the rows where they are, to
-        // test whether reordering the rows is what makes the badge
-        // animations expensive
-        if (Settings.get_choice("diag", "none") == "freeze" &&
-            self.tbody_el[0].childElementCount > 0) {
-            return;
-        }
-
         var list = self.user_list;
 
         list.sort(self.compare_users);
@@ -622,41 +610,6 @@ export default new function () {
         }
 
         self.reposition_overlay_badges();
-    };
-
-    // The "composited table descendant" and "animate body-level span"
-    // diagnostic modes from the settings panel, for isolating what makes
-    // badge animations expensive on iOS WebKit
-    self.apply_diag = function () {
-        var diag = Settings.get_choice("diag", "none");
-
-        // A permanently composited (but invisible and static) element
-        // inside one table row, present through the whole replay
-        var probe = self.user_list.length > 0 ?
-                    $(self.user_list[0]["row"]).children("td.rank")
-                        .children(".rank_delta")[0] : undefined;
-        if (probe !== undefined) {
-            probe.style.transform =
-                diag == "composite" ? "translateZ(0)" : "";
-        }
-
-        // An unrelated animated span outside the table, running forever
-        if (diag == "bodyanim") {
-            if (self.diag_span === undefined) {
-                self.diag_span = document.createElement("span");
-                self.diag_span.id = "DiagAnim";
-                self.diag_span.textContent = "\u25B2";
-                document.body.appendChild(self.diag_span);
-            }
-            if (self.diag_anim === undefined) {
-                self.diag_anim = self.diag_span.animate([
-                    {"opacity": 0.2}, {"opacity": 1}, {"opacity": 0.2}
-                ], {"duration": 2000, "iterations": Infinity});
-            }
-        } else if (self.diag_anim !== undefined) {
-            self.diag_anim.cancel();
-            self.diag_anim = undefined;
-        }
     };
 
 
@@ -892,38 +845,13 @@ export default new function () {
         }
     };
 
-    // A "climbed/dropped n places" badge, shown in the gutter left of the
-    // row while replaying. The badge_mode setting picks the implementation,
-    // as their cost differs wildly on iOS WebKit:
-    //
-    //   "row"     - a permanent span per row inside its rank cell, faded
-    //               with the Web Animations API
-    //   "overlay" - spans in one fixed-position container outside the
-    //               table, positioned from the cached row geometry
-    //   "canvas"  - all badges drawn into a single canvas over the page
-    //   "static"  - the "row" span, shown and hidden without animating
-    //
-    // The suspicion behind the non-"row" modes: an animated element inside
-    // the table seems to put the table into an expensive compositing
-    // configuration, which every row move then pays for, so the badges are
-    // moved out of the table's subtree entirely.
-
-    // Common bookkeeping: while a badge is showing, fold further movement
-    // into it in place rather than restarting it (rapid rank changes would
-    // otherwise flash constantly). Returns the delta to display, or 0 when
-    // the row is back where its live badge started.
-    self.delta_to_show = function (user, old_rank, new_rank, active) {
-        var from = active ? user["delta_from"] : old_rank;
-        if (!active) {
-            user["delta_from"] = from;
-        }
-        return from - new_rank;
-    };
-
-    self.delta_text = function (delta) {
-        return (delta > 0 ? "\u25B2" : "\u25BC") + Math.abs(delta);
-    };
-
+    // A fading "climbed/dropped n places" badge, shown in the gutter left
+    // of the row while replaying. The badges live in one fixed-position
+    // container over the page rather than inside the table rows: on iOS
+    // WebKit any composited descendant inside the table (even a single
+    // static one) puts the table into an expensive compositing
+    // configuration that every replay tick pays for, while the same
+    // animation in a layer with no table ancestry is cheap.
     self.init_delta_overlay = function () {
         self.overlay_el = document.createElement("div");
         self.overlay_el.id = "RankDeltaOverlay";
@@ -981,10 +909,18 @@ export default new function () {
         }
     };
 
-    self.show_overlay_delta = function (user, old_rank, new_rank) {
+    self.show_rank_delta = function (user, old_rank, new_rank) {
         var entry = user["delta_entry"];
         var active = entry !== undefined && entry["anim"].playState === "running";
-        var delta = self.delta_to_show(user, old_rank, new_rank, active);
+
+        // While a badge is showing, fold further movement into it in place
+        // rather than restarting it (rapid rank changes would otherwise
+        // flash constantly)
+        var from = active ? user["delta_from"] : old_rank;
+        if (!active) {
+            user["delta_from"] = from;
+        }
+        var delta = from - new_rank;
 
         if (delta == 0) {
             if (active) {
@@ -1019,181 +955,9 @@ export default new function () {
         }
 
         entry["badge"].className = delta > 0 ? "rank_delta up" : "rank_delta down";
-        entry["badge"].textContent = self.delta_text(delta);
+        entry["badge"].textContent =
+            (delta > 0 ? "\u25B2" : "\u25BC") + Math.abs(delta);
         self.place_overlay_badge(entry);
-    };
-
-    ////// Canvas badges
-    //
-    // No per-badge elements at all: every live badge is drawn into one
-    // canvas over the page from a single animation-frame loop, so the
-    // browser has one composited object to deal with no matter how many
-    // badges are alive.
-
-    const CANVAS_DURATION = 2000;
-
-    self.init_delta_canvas = function () {
-        self.canvas_el = document.createElement("canvas");
-        self.canvas_el.id = "RankDeltaCanvas";
-        document.body.appendChild(self.canvas_el);
-        self.canvas_ctx = self.canvas_el.getContext("2d");
-        self.canvas_live = new Array();
-        self.canvas_frame = undefined;
-    };
-
-    self.show_canvas_delta = function (user, old_rank, new_rank) {
-        if (self.canvas_el === undefined) {
-            self.init_delta_canvas();
-        }
-
-        var entry = user["delta_draw"];
-        var active = entry !== undefined &&
-                     self.canvas_live.indexOf(entry) !== -1;
-        var delta = self.delta_to_show(user, old_rank, new_rank, active);
-
-        if (delta == 0) {
-            if (active) {
-                self.canvas_live.splice(self.canvas_live.indexOf(entry), 1);
-            }
-            return;
-        }
-
-        if (!active) {
-            entry = {"user": user, "start": performance.now()};
-            user["delta_draw"] = entry;
-            self.canvas_live.push(entry);
-        }
-
-        entry["text"] = self.delta_text(delta);
-        entry["up"] = delta > 0;
-
-        if (self.canvas_frame === undefined) {
-            self.canvas_frame =
-                window.requestAnimationFrame(self.draw_delta_canvas);
-        }
-    };
-
-    self.draw_delta_canvas = function (now) {
-        if (self.geometry === undefined) {
-            self.measure_geometry();
-        }
-        var geometry = self.geometry;
-        var canvas = self.canvas_el;
-        var ratio = window.devicePixelRatio || 1;
-        var width = geometry["gutter_right"] + 5;
-        var height = geometry["frame_bottom"] - geometry["frame_top"];
-
-        if (canvas.width !== Math.round(width * ratio) ||
-            canvas.height !== Math.round(height * ratio)) {
-            canvas.width = Math.round(width * ratio);
-            canvas.height = Math.round(height * ratio);
-            canvas.style.width = width + "px";
-            canvas.style.height = height + "px";
-            canvas.style.top = geometry["frame_top"] + "px";
-        }
-
-        var ctx = self.canvas_ctx;
-        ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-        ctx.clearRect(0, 0, width, height);
-        ctx.font = "bold 10px sans-serif";
-        ctx.textAlign = "right";
-        ctx.textBaseline = "middle";
-
-        var scroll = geometry["frame"].scrollTop - geometry["table_top"];
-        var remaining = new Array();
-
-        for (const entry of self.canvas_live) {
-            var age = (now - entry["start"]) / CANVAS_DURATION;
-            if (age >= 1) {
-                if (entry["user"]["delta_draw"] === entry) {
-                    entry["user"]["delta_draw"] = undefined;
-                }
-                continue;
-            }
-            remaining.push(entry);
-
-            var y = self.row_offset(entry["user"]) - scroll +
-                    geometry["row_height"] / 2;
-            if (y < 0 || y > height) {
-                continue;
-            }
-
-            // Fade in over the first 15%, hold, then fade out
-            var alpha = age < 0.15 ? age / 0.15 :
-                        (age > 0.7 ? (1 - age) / 0.3 : 1);
-            ctx.globalAlpha = alpha;
-            ctx.fillStyle = entry["up"] ? "#217A2B" : "#C03030";
-            ctx.fillText(entry["text"], width - 5, y);
-        }
-
-        self.canvas_live = remaining;
-        self.canvas_frame = remaining.length == 0 ? undefined :
-            window.requestAnimationFrame(self.draw_delta_canvas);
-    };
-
-    self.show_rank_delta = function (user, old_rank, new_rank) {
-        var mode = Settings.get_choice("badge_mode", "row");
-        if (mode == "overlay") {
-            self.show_overlay_delta(user, old_rank, new_rank);
-            return;
-        }
-        if (mode == "canvas") {
-            self.show_canvas_delta(user, old_rank, new_rank);
-            return;
-        }
-
-        var badge = user["delta_badge"];
-        if (badge === undefined || badge.parentNode === null ||
-            badge.parentNode.parentNode !== user["row"]) {
-            // Cached from the row, and refreshed whenever the row is rebuilt
-            badge = $(user["row"]).children("td.rank").children(".rank_delta")[0];
-            user["delta_badge"] = badge;
-        }
-        if (badge === undefined) {
-            return;
-        }
-
-        var live = mode == "static" ? user["delta_timer"] !== undefined :
-                   (user["delta_anim"] !== undefined &&
-                    user["delta_anim"].playState === "running");
-        var delta = self.delta_to_show(user, old_rank, new_rank, live);
-
-        if (delta == 0) {
-            if (live && mode == "static") {
-                clearTimeout(user["delta_timer"]);
-                self.hide_static_delta(user);
-            } else if (live) {
-                user["delta_anim"].cancel();
-            }
-            return;
-        }
-
-        if (!live && mode == "static") {
-            badge.style.opacity = "1";
-            user["delta_timer"] = window.setTimeout(function () {
-                self.hide_static_delta(user);
-            }, 2000);
-        } else if (!live) {
-            // The badge is opacity: 0 at rest, so it disappears when the
-            // animation ends. WAAPI rather than CSS animations: the row is
-            // re-inserted whenever it moves in the standings, which restarts
-            // CSS animations (leaving the badge stuck alive), while WAAPI
-            // animations survive DOM moves and reliably finish.
-            user["delta_anim"] = badge.animate([
-                {"opacity": 0, "transform": "translateY(2px)"},
-                {"opacity": 1, "transform": "translateY(0)", "offset": 0.15},
-                {"opacity": 1, "transform": "translateY(0)", "offset": 0.7},
-                {"opacity": 0, "transform": "translateY(-3px)"}
-            ], {"duration": 2000, "easing": "ease-out"});
-        }
-
-        badge.className = "rank_delta " + (delta > 0 ? "up" : "down");
-        badge.textContent = self.delta_text(delta);
-    };
-
-    self.hide_static_delta = function (user) {
-        user["delta_badge"].style.opacity = "";
-        user["delta_timer"] = undefined;
     };
 
     // Record every row's vertical position; pass the result to animate_sort
