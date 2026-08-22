@@ -59,20 +59,31 @@
                     <button id="Settings_button" type="button" title="Display settings"></button>
                     <div id="Settings_panel">
                         <div id="Settings_title">Display settings</div>
-                        <label class="Settings_item" title="Show &#x25B2;/&#x25BC; badges next to contestants whose rank changed while moving through contest time.">
-                            <input type="checkbox" data-setting="rank_deltas"/>
-                            <span>Rank change badges</span>
-                        </label>
-                        <label class="Settings_item" title="Flash task cells green or red as their score changes while moving through contest time.">
-                            <input type="checkbox" data-setting="score_flashes"/>
-                            <span>Score change flashes</span>
-                        </label>
+                        <div class="Settings_row">
+                            <label class="Settings_item">
+                                <input type="checkbox" data-setting="rank_deltas"/>
+                                <span>Rank change badges</span>
+                            </label>
+                            <button type="button" class="Settings_info" aria-label="More information" data-info="Show &#x25B2;/&#x25BC; badges next to contestants whose rank changed while moving through contest time."></button>
+                        </div>
+                        <div class="Settings_row">
+                            <label class="Settings_item">
+                                <input type="checkbox" data-setting="score_flashes"/>
+                                <span>Score change flashes</span>
+                            </label>
+                            <button type="button" class="Settings_info" aria-label="More information" data-info="Flash task cells green or red as their score changes while moving through contest time."></button>
+                        </div>
                         <div id="Settings_warning">May reduce replay smoothness on this device.</div>
-                        <label class="Settings_item" title="When the scoreboard is filtered to selected teams or sorted in an alternate order, also show each contestant's rank among all contestants, in parentheses.">
-                            <input type="checkbox" data-setting="global_ranks"/>
-                            <span>Global rank in parentheses</span>
-                        </label>
+                        <div class="Settings_row">
+                            <label class="Settings_item">
+                                <input type="checkbox" data-setting="global_ranks"/>
+                                <span>Global rank in parentheses</span>
+                            </label>
+                            <button type="button" class="Settings_info" aria-label="More information" data-info="When the scoreboard is filtered to selected teams or sorted in an alternate order, also show each contestant's rank among all contestants, in parentheses."></button>
+                        </div>
+                        <div id="Settings_tooltip"></div>
                     </div>
+                    <div id="Settings_notice">Animations were turned off to keep the replay smooth on this device. You can re-enable them here.</div>
                 </div>
                 <div id="LoadError">An error occurred while loading the data. Check your connection and reload the page.</div>
             </div>

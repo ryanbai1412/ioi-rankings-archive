@@ -1748,6 +1748,12 @@ abbr {
     margin-bottom: 0.5em;
 }
 
+.Settings_row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
 .Settings_item {
     display: flex;
     align-items: center;
@@ -1756,6 +1762,71 @@ abbr {
     cursor: pointer;
     -webkit-user-select: none;
     user-select: none;
+}
+
+.Settings_info {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.3em;
+    height: 1.3em;
+    margin-left: 0.5em;
+    border: 1px solid #b1b1b1;
+    border-radius: 50%;
+    padding: 0;
+    font: inherit;
+    font-size: 0.8em;
+    font-weight: bold;
+    font-style: italic;
+    font-family: Georgia, serif;
+    color: #666666;
+    background-color: #FFFFFF;
+    cursor: pointer;
+}
+
+.Settings_info.active {
+    color: #FFFFFF;
+    background-color: #1745ff;
+    border-color: #1745ff;
+}
+
+#Settings_tooltip {
+    display: none;
+    margin-top: 0.4em;
+    padding: 0.4em 0.6em;
+    border: 1px solid #b1b1b1;
+    border-radius: 4px;
+    background-color: #f5f5f5;
+    font-size: 0.85em;
+    color: #333333;
+}
+
+#Settings_tooltip.visible {
+    display: block;
+}
+
+#Settings_notice {
+    display: none;
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    width: 16em;
+    padding: 0.5em 0.7em;
+    background-color: #333333;
+    color: #FFFFFF;
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    text-align: left;
+    cursor: pointer;
+}
+
+#Settings_notice.visible {
+    display: block;
+}
+
+/* The panel wins if both are somehow shown */
+#Settings_box.open #Settings_notice {
+    display: none;
 }
 
 #Settings_warning {

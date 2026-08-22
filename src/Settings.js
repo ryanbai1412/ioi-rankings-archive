@@ -31,6 +31,8 @@ export default new function () {
     const STORAGE_KEY = "ranking_settings";
     // The remembered verdict of the runtime performance check
     const VERDICT_KEY = "ranking_effects_verdict";
+    // Whether the one-time auto-disable notice has already been shown
+    const NOTICE_KEY = "ranking_effects_notice";
 
     const ANIMATION_SETTINGS = ["rank_deltas", "score_flashes"];
 
@@ -71,6 +73,22 @@ export default new function () {
             this.checked = self.get(this.dataset["setting"]);
         }).on("change", function () {
             self.set(this.dataset["setting"], this.checked);
+        });
+
+        // The info buttons show their explanation in a shared tooltip area
+        // at the bottom of the panel; clicking the same button again (or
+        // another one) hides or replaces it. Click-based so it also works
+        // on touch screens, where there is no hover.
+        var tooltip_el = $("#Settings_tooltip");
+        self.panel_el.find(".Settings_info").text("i").on("click", function () {
+            var button = $(this);
+            var active = button.hasClass("active");
+            self.panel_el.find(".Settings_info").removeClass("active");
+            tooltip_el.toggleClass("visible", !active);
+            if (!active) {
+                button.addClass("active");
+                tooltip_el.text(this.dataset["info"]);
+            }
         });
 
         self.update_warning();
@@ -129,13 +147,32 @@ export default new function () {
         }
         self.save(VERDICT_KEY, "slow");
 
+        var changed = false;
         for (const name of ANIMATION_SETTINGS) {
             if (!self.is_explicit(name)) {
                 self.panel_el.find("input[data-setting=" + name + "]")
                     .prop("checked", self.get(name));
                 self.notify(name);
+                changed = true;
             }
         }
+
+        if (changed && self.load(NOTICE_KEY) === null) {
+            self.save(NOTICE_KEY, true);
+            self.show_notice();
+        }
+    };
+
+    // A one-time notice anchored to the gear button, telling the user the
+    // animations were switched off because replay was running slow
+    self.show_notice = function () {
+        var notice = $("#Settings_notice");
+        notice.addClass("visible");
+        var dismiss = function () {
+            notice.removeClass("visible");
+        };
+        notice.on("click", dismiss);
+        window.setTimeout(dismiss, 8000);
     };
 
     self.on_change = function (callback) {
