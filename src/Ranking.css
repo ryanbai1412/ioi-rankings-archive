@@ -1352,6 +1352,45 @@ abbr {
     color: #C03030;
 }
 
+/* The overlay badge container: badges live here instead of inside the
+   table rows when the "Overlay animated" badge mode is selected, so the
+   animated elements have no table ancestry */
+#RankDeltaOverlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 30;
+    pointer-events: none;
+}
+
+#RankDeltaOverlay .rank_delta {
+    /* Positioned purely by the inline transform set from the cached row
+       geometry, overriding the in-row gutter anchoring */
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: auto;
+}
+
+#RankDeltaCanvas {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 30;
+    pointer-events: none;
+}
+
+/* The "animate body-level span" diagnostic */
+#DiagAnim {
+    position: fixed;
+    top: 4px;
+    left: 4px;
+    z-index: 30;
+    font-weight: bold;
+    color: #217A2B;
+    pointer-events: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
     #Scoreboard_body tr {
         transition: none !important;
@@ -1766,6 +1805,11 @@ abbr {
     cursor: pointer;
     -webkit-user-select: none;
     user-select: none;
+}
+
+.Settings_item select {
+    font: inherit;
+    font-size: 0.9em;
 }
 
 .Settings_info {

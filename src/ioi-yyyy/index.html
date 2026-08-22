@@ -73,6 +73,30 @@
                             </label>
                             <button type="button" class="Settings_info" aria-label="More information" data-info="Flash task cells green or red as their score changes while moving through contest time."></button>
                         </div>
+                        <div class="Settings_row">
+                            <label class="Settings_item">
+                                <span>Badge mode</span>
+                                <select data-choice="badge_mode">
+                                    <option value="row">In-row animated</option>
+                                    <option value="overlay">Overlay animated</option>
+                                    <option value="canvas">Canvas overlay</option>
+                                    <option value="static">In-row static</option>
+                                </select>
+                            </label>
+                            <button type="button" class="Settings_info" aria-label="More information" data-info="Where the rank badges live: inside the table rows (animated or static), as animated elements in a fixed overlay outside the table, or drawn on a single canvas overlay."></button>
+                        </div>
+                        <div class="Settings_row">
+                            <label class="Settings_item">
+                                <span>Diagnostics</span>
+                                <select data-choice="diag">
+                                    <option value="none">None</option>
+                                    <option value="freeze">Freeze row order</option>
+                                    <option value="composite">Composited table descendant</option>
+                                    <option value="bodyanim">Animate body-level span</option>
+                                </select>
+                            </label>
+                            <button type="button" class="Settings_info" aria-label="More information" data-info="Performance experiments: freeze the row order during replay, keep a permanently composited element inside the table, or run an unrelated animation outside the table while rows reorder."></button>
+                        </div>
                         <div id="Settings_warning">May reduce replay smoothness on this device.</div>
                         <div class="Settings_row">
                             <label class="Settings_item">
