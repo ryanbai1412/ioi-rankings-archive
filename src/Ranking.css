@@ -82,7 +82,9 @@ abbr {
 
 #InnerFrame {
     position: absolute;
-    top: calc(3em + 46px);
+    /* The timeline ends at 3em + 55px; with the 2px top margin below this
+       leaves the same 7px gap as above the timeline */
+    top: calc(3em + 60px);
     left: 220px;
     right: 0;
     bottom: 0;
@@ -101,13 +103,17 @@ abbr {
 
 #Timeline {
     position: absolute;
-    top: 3em;
+    /* Centered in the band between the header (whose border ends at
+       3em + 2px) and the scoreboard: 7px of air on both sides */
+    top: calc(3em + 9px);
     left: 220px;
     right: 0;
     height: 46px;
     box-sizing: border-box;
-    margin: 2px 0 0 2px;
-    padding: 0 3em;
+    margin: 0 0 0 2px;
+    /* Extra right padding matches the scoreboard's scrollbar gutter, so the
+       right edges of the two line up (see index.js) */
+    padding: 0 calc(3em + var(--scrollbar-width, 0px)) 0 3em;
     display: flex;
     align-items: center;
     z-index: 9;
@@ -125,7 +131,9 @@ abbr {
 
 #Timeline_slider {
     position: absolute;
-    top: 10px;
+    /* Half the slider's height above the middle (nudged up 2px to look
+       optically centered next to the label and the controls) */
+    top: calc(50% - 9px);
     left: 0;
     width: 100%;
     height: 14px;
@@ -139,16 +147,26 @@ abbr {
     outline: none;
 }
 
+/* WebKit has no progress pseudo-element, so the fill left of the thumb is a
+   gradient whose stop (--Timeline_fill) is kept in sync from Timeline.js */
 #Timeline_slider::-webkit-slider-runnable-track {
     height: 4px;
     border-radius: 2px;
-    background-color: #D2D2D6;
+    background: linear-gradient(to right,
+        #1745ff var(--Timeline_fill, 100%),
+        #D2D2D6 var(--Timeline_fill, 100%));
 }
 
 #Timeline_slider::-moz-range-track {
     height: 4px;
     border-radius: 2px;
     background-color: #D2D2D6;
+}
+
+#Timeline_slider::-moz-range-progress {
+    height: 4px;
+    border-radius: 2px;
+    background-color: #1745ff;
 }
 
 #Timeline_slider::-webkit-slider-thumb {
@@ -174,7 +192,8 @@ abbr {
 
 #Timeline_ticks {
     position: absolute;
-    top: 10px;
+    /* Aligned with the slider */
+    top: calc(50% - 9px);
     /* The thumb is 14px wide, so the track the ticks refer to is inset by 7px */
     left: 7px;
     right: 7px;
@@ -183,6 +202,11 @@ abbr {
 .Timeline_tick {
     position: absolute;
     top: 0;
+    cursor: pointer;
+}
+
+.Timeline_tick_label:hover {
+    color: #1745ff;
 }
 
 .Timeline_tick_mark {
@@ -205,35 +229,27 @@ abbr {
     white-space: nowrap;
 }
 
-.Timeline_tick:first-child .Timeline_tick_label {
-    transform: none;
-}
-
-.Timeline_tick:last-child .Timeline_tick_label {
-    transform: translateX(-100%);
-}
-
 #Timeline_label {
     flex: 0 0 auto;
     width: 7em;
     margin-left: 1em;
     text-align: right;
     font-variant-numeric: tabular-nums;
-    color: #666666;
-}
-
-#Timeline.live #Timeline_label {
     color: #1745ff;
     font-weight: bold;
 }
 
 #Timeline_controls {
     flex: 0 0 auto;
+    display: flex;
+    align-items: center;
     margin-left: 0.75em;
-    white-space: nowrap;
 }
 
 #Timeline_controls button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     width: 2.2em;
     height: 1.8em;
     margin-left: 0.25em;
@@ -241,7 +257,6 @@ abbr {
     border-radius: 4px;
     padding: 0;
     font: inherit;
-    line-height: 1.8em;
     color: #1745ff;
     background-color: #FFFFFF;
     cursor: pointer;
@@ -250,6 +265,259 @@ abbr {
 #Timeline_controls button:hover {
     color: #FFFFFF;
     background-color: #1745ff;
+}
+
+#Timeline_controls button svg {
+    width: 1.1em;
+    height: 1.1em;
+    fill: currentColor;
+}
+
+#Timeline_play .icon_pause {
+    display: none;
+}
+
+#Timeline_play.playing .icon_play {
+    display: none;
+}
+
+#Timeline_play.playing .icon_pause {
+    display: block;
+}
+
+#Follow {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    margin-left: 0.75em;
+    padding-left: 0.75em;
+    border-left: 1px solid #D2D2D6;
+}
+
+#Follow_eye {
+    width: 2.2em;
+    height: 1.8em;
+    border: 1px solid #1745ff;
+    border-radius: 4px;
+    padding: 0;
+    color: #1745ff;
+    background-color: #FFFFFF;
+    cursor: pointer;
+}
+
+#Follow_eye svg {
+    width: 1.3em;
+    height: 1.3em;
+    vertical-align: middle;
+}
+
+#Follow_eye .Follow_eye_body {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+}
+
+#Follow_eye .Follow_eye_pupil {
+    fill: currentColor;
+}
+
+/* Locked = shaded in: the whole button inverts to solid blue */
+#Follow_eye.locked {
+    color: #FFFFFF;
+    background-color: #1745ff;
+}
+
+#Follow_eye.locked .Follow_eye_body {
+    fill: currentColor;
+}
+
+#Follow_eye.locked .Follow_eye_pupil {
+    fill: #1745ff;
+}
+
+#Follow_eye:not(.disabled):not(.locked):hover {
+    background-color: #E8EDFF;
+}
+
+#Follow_eye.locked:hover {
+    background-color: #0F33CC;
+    border-color: #0F33CC;
+}
+
+#Follow_eye.locked:hover .Follow_eye_pupil {
+    fill: #0F33CC;
+}
+
+/* No contestant picked yet */
+#Follow_eye.disabled {
+    border-color: #B4B4B8;
+    color: #B4B4B8;
+    cursor: default;
+}
+
+#Follow_picker {
+    position: relative;
+    margin-left: 0.5em;
+}
+
+#Follow_toggle {
+    display: flex;
+    align-items: center;
+    width: 14em;
+    height: 1.8em;
+    border: 1px solid #1745ff;
+    border-radius: 4px;
+    padding: 0 0.5em;
+    font: inherit;
+    color: #1745ff;
+    background-color: #FFFFFF;
+    cursor: pointer;
+}
+
+#Follow_toggle:hover {
+    background-color: #E8EDFF;
+}
+
+#Follow_picker.open #Follow_toggle {
+    border-color: #1745ff;
+    box-shadow: 0 0 0 2px rgba(23, 69, 255, 0.15);
+}
+
+#Follow_toggle_label {
+    flex: 1 1 auto;
+    text-align: left;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.Follow_chevron {
+    flex: 0 0 auto;
+    width: 1em;
+    height: 1em;
+    margin-left: 0.3em;
+    color: #1745ff;
+    transition: transform 0.15s;
+}
+
+#Follow_picker.open .Follow_chevron {
+    transform: rotate(180deg);
+}
+
+#Follow_menu {
+    display: none;
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    width: 22em;
+    border: 1px solid #E2E2E6;
+    border-radius: 8px;
+    background-color: #FFFFFF;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+    overflow: hidden;
+    z-index: 50;
+}
+
+#Follow_picker.open #Follow_menu {
+    display: block;
+}
+
+#Follow_search {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    border: none;
+    border-bottom: 1px solid #ECECEF;
+    padding: 0.6em 0.8em;
+    font: inherit;
+    outline: none;
+}
+
+#Follow_search::placeholder {
+    color: #AAAAAA;
+}
+
+#Follow_clear {
+    display: none;
+    width: 100%;
+    border: none;
+    border-bottom: 1px solid #ECECEF;
+    padding: 0.45em 0.8em;
+    text-align: left;
+    font: inherit;
+    color: #C03030;
+    background-color: #FFFFFF;
+    cursor: pointer;
+}
+
+#Follow.following #Follow_clear {
+    display: block;
+}
+
+#Follow_clear:hover {
+    background-color: #FFF3F3;
+}
+
+#Follow_list {
+    max-height: 17em;
+    overflow-y: auto;
+    padding: 0.25em 0;
+}
+
+.Follow_option {
+    display: flex;
+    align-items: center;
+    padding: 0.35em 0.8em;
+    cursor: pointer;
+}
+
+.Follow_option.hidden {
+    display: none;
+}
+
+.Follow_option.active {
+    background-color: #EEF2FF;
+}
+
+.Follow_option.selected::after {
+    content: "\2713";
+    flex: 0 0 auto;
+    margin-left: 0.5em;
+    color: #1745ff;
+    font-weight: bold;
+}
+
+.Follow_option_flag {
+    flex: 0 0 auto;
+    width: 1.4em;
+    margin-right: 0.5em;
+    border-radius: 2px;
+    box-shadow: 0 0 1px rgba(0, 0, 0, 0.4);
+}
+
+.Follow_option_id {
+    flex: 0 0 3.6em;
+    font-weight: bold;
+    font-variant-numeric: tabular-nums;
+    color: #555555;
+}
+
+.Follow_option.selected .Follow_option_id {
+    color: #1745ff;
+}
+
+.Follow_option_name {
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#Follow_empty {
+    display: none;
+    padding: 0.8em;
+    text-align: center;
+    color: #999999;
 }
 
 
@@ -618,7 +886,7 @@ abbr {
 #Scoreboard {
     width: 100%;
     table-layout: fixed;
-    margin: 20px 0;
+    margin: 10px 0 20px 0;
 }
 
 #Scoreboard_cols col.sel {
@@ -1034,6 +1302,66 @@ abbr {
 /*
    The animation stuff ends here.
  */
+
+/* Playback effects: flashes on changed score cells, rank-delta badges and
+   sliding rows, triggered by the timeline while replaying the contest.
+   The flash is an inset shadow so the cell's own background shows through
+   as it fades. */
+
+#Scoreboard_body td.cell_up {
+    animation: cell_up 0.5s ease-out;
+}
+
+#Scoreboard_body td.cell_down {
+    animation: cell_down 0.5s ease-out;
+}
+
+@keyframes cell_up {
+    from {box-shadow: inset 0 0 0 2em rgba(138, 226, 52, 0.65);}
+    to {box-shadow: inset 0 0 0 2em rgba(138, 226, 52, 0);}
+}
+
+@keyframes cell_down {
+    from {box-shadow: inset 0 0 0 2em rgba(239, 41, 41, 0.65);}
+    to {box-shadow: inset 0 0 0 2em rgba(239, 41, 41, 0);}
+}
+
+#Scoreboard_body td.rank {
+    position: relative;
+}
+
+/* Sits in the gutter to the left of the row: anchored to the rank cell,
+   pushed past the 2em sel column (the sel cell itself is opacity: 0, so the
+   badge cannot live inside it). The fade in/out is a Web Animations API
+   animation (see Scoreboard.js) */
+.rank_delta {
+    position: absolute;
+    top: 50%;
+    /* Past the sel column, which is 2em wide at the table's font size; the
+       division undoes this element's 0.75em font-size scaling */
+    right: calc(100% + 2em / 0.75 + 5px);
+    transform: translateY(-50%);
+    font-size: 0.75em;
+    line-height: 1.2em;
+    font-weight: bold;
+    white-space: nowrap;
+    pointer-events: none;
+}
+
+.rank_delta.up {
+    color: #217A2B;
+}
+
+.rank_delta.down {
+    color: #C03030;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    #Scoreboard_body tr {
+        transition: none !important;
+        transform: none !important;
+    }
+}
 
 #Scoreboard_body tr td.score {
     opacity: 0.75;

@@ -6,6 +6,7 @@
 
 import $ from "jquery";
 import DataStore from "./DataStore.js";
+import Follow from "./Follow.js";
 import HistoryStore from "./HistoryStore.js";
 import Overview from "./Overview.js";
 import Scoreboard from "./Scoreboard.js";
@@ -21,6 +22,24 @@ const BASE_RATE = 300;
 
 // Don't recompute the scoreboard more often than this while playing (in ms)
 const MIN_FRAME_INTERVAL = 60;
+
+// Scrubbing to within this many pixels of a tick snaps to it
+const SNAP_PIXELS = 12;
+
+// How far the arrow keys step, in contest seconds
+const ARROW_STEP = 15 * 60;
+
+// How far J and L jump, in contest seconds
+const JUMP_STEP = 60 * 60;
+
+// Inline SVG control icons: Unicode glyphs like U+23EE render differently
+// per font, and mobile platforms show them as color emoji
+const ICONS = {
+    "play": "<svg class=\"icon_play\" viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M8 5v14l11-7z\"/></svg>",
+    "pause": "<svg class=\"icon_pause\" viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M6 5h4v14H6z M14 5h4v14h-4z\"/></svg>",
+    "prev": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M6 6h2v12H6z M18 6l-8.5 6 8.5 6z\"/></svg>",
+    "next": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M6 6l8.5 6L6 18z M16 6h2v12h-2z\"/></svg>"
+};
 
 function round(value, ndigits) {
     var factor = Math.pow(10, ndigits);
@@ -50,8 +69,30 @@ export default new function () {
         self.slider_el.attr({"min": 0, "max": SLIDER_STEPS, "value": SLIDER_STEPS});
 
         self.slider_el.on("input", function () {
-            self.pause();
-            self.set_position(parseInt($(this).val(), 10) / SLIDER_STEPS);
+            // Read the value before pausing: pause() refreshes the UI, which
+            // would reset the slider to the old position
+            var position = self.snap(parseInt($(this).val(), 10) / SLIDER_STEPS);
+            // Hold playback while scrubbing, but remember to resume
+            if (self.playing) {
+                self.pause();
+                self.resume_after_scrub = true;
+            }
+            self.set_position(position);
+        });
+
+        self.slider_el.on("change", function () {
+            self.set_position(self.snap(parseInt($(this).val(), 10) / SLIDER_STEPS));
+            if (self.resume_after_scrub) {
+                self.resume_after_scrub = false;
+                // Don't restart from the beginning if dragged to the very end
+                if (self.position < 1) {
+                    self.play();
+                }
+            }
+        });
+
+        $("#Timeline_ticks").on("click", ".Timeline_tick", function () {
+            self.set_position(parseFloat($(this).attr("data-position")));
         });
 
         $("#Timeline_prev").click(function () {
@@ -71,6 +112,54 @@ export default new function () {
         $("#Timeline_speed").click(function () {
             self.speed_idx = (self.speed_idx + 1) % SPEEDS.length;
             self.update_ui();
+        });
+
+        $("#Timeline_prev").html(ICONS["prev"]).attr("title", "Seek to the previous day");
+        $("#Timeline_next").html(ICONS["next"]).attr("title", "Seek to the next day");
+        // Both icons are in the button; CSS shows one based on .playing
+        $("#Timeline_play").html(ICONS["play"] + ICONS["pause"]);
+
+        $(document).on("keydown", function (event) {
+            // Leave typing alone (e.g. the team search box); the slider is
+            // ours though, and we override its native tiny arrow steps
+            if (event.target !== self.slider_el[0] &&
+                $(event.target).is("input, textarea, select, [contenteditable]")) {
+                return;
+            }
+
+            if (event.ctrlKey || event.altKey || event.metaKey) {
+                return;
+            }
+
+            switch (event.key) {
+            case " ":
+                event.preventDefault();
+                self.toggle_play();
+                break;
+            case "ArrowLeft":
+                event.preventDefault();
+                self.advance(-ARROW_STEP);
+                break;
+            case "ArrowRight":
+                event.preventDefault();
+                self.advance(+ARROW_STEP);
+                break;
+            case "j":
+            case "J":
+                event.preventDefault();
+                self.advance(-JUMP_STEP);
+                break;
+            case "l":
+            case "L":
+                event.preventDefault();
+                self.advance(+JUMP_STEP);
+                break;
+            case "k":
+            case "K":
+                event.preventDefault();
+                self.toggle_play();
+                break;
+            }
         });
 
         self.update_ui();
@@ -119,12 +208,25 @@ export default new function () {
     // Set the scoreboard to the state it had at the given (absolute) time
     self.apply_time = function (time) {
         var dirty = new Object();
+        // First and last score seen per changed cell (keyed "user/task"),
+        // so a batch of crossed events nets out for the flash effects
+        var first_score = new Object();
+        var last_score = new Object();
+        // Ranks in the currently displayed sorting, snapshotted before the
+        // events mutate any scores, so the rank-delta badges reflect the
+        // active column rather than always the global standings
+        var old_ranks = Scoreboard.get_local_ranks();
 
         while (self.applied < self.events.length &&
                self.events[self.applied]["time"] <= time) {
             var event = self.events[self.applied];
             DataStore.users[event["user"]]["t_" + event["task"]] = event["score"];
             dirty[event["user"]] = true;
+            var key = event["user"] + "/" + event["task"];
+            if (!(key in first_score)) {
+                first_score[key] = event["prev_score"];
+            }
+            last_score[key] = event["score"];
             self.applied += 1;
         }
 
@@ -133,6 +235,11 @@ export default new function () {
             var event = self.events[self.applied];
             DataStore.users[event["user"]]["t_" + event["task"]] = event["prev_score"];
             dirty[event["user"]] = true;
+            var key = event["user"] + "/" + event["task"];
+            if (!(key in first_score)) {
+                first_score[key] = event["score"];
+            }
+            last_score[key] = event["prev_score"];
         }
 
         if ($.isEmptyObject(dirty)) {
@@ -149,8 +256,48 @@ export default new function () {
             Scoreboard.refresh_user(DataStore.users[u_id]);
         }
 
+        // Flashes and badges can't be read at high playback speeds, so they
+        // switch off there; rows only slide on discrete jumps (paused
+        // scrubs, steps, seeks), where a single reorder can be followed
+        var effects = !self.playing || SPEEDS[self.speed_idx] <= 4;
+        var slide = effects && !self.playing;
+
+        var measured = slide ? Scoreboard.measure_rows() : null;
+
         // Ranks (and thus the order) may have changed for everyone
         Scoreboard.sort();
+
+        // Recenter on the followed user first: what counts as visible for
+        // the effects below depends on where the view ends up
+        Follow.recenter();
+
+        if (measured !== null) {
+            Scoreboard.animate_sort(measured);
+        }
+
+        if (effects) {
+            var range = Scoreboard.visible_range();
+
+            for (var key in last_score) {
+                var sep = key.indexOf("/");
+                var user = DataStore.users[key.slice(0, sep)];
+                var delta = last_score[key] - first_score[key];
+                if (delta != 0 && Scoreboard.is_row_visible(user, range)) {
+                    Scoreboard.flash_cell(user, key.slice(sep + 1), delta);
+                }
+            }
+
+            var new_ranks = Scoreboard.get_local_ranks();
+
+            for (var u_id in dirty) {
+                var user = DataStore.users[u_id];
+                if (old_ranks[u_id] !== undefined && new_ranks[u_id] !== undefined &&
+                    old_ranks[u_id] != new_ranks[u_id] &&
+                    Scoreboard.is_row_visible(user, range)) {
+                    Scoreboard.show_rank_delta(user, old_ranks[u_id], new_ranks[u_id]);
+                }
+            }
+        }
 
         Overview.recompute();
         Overview.update_score_chart(0);
@@ -192,7 +339,8 @@ export default new function () {
 
         for (var i = 0; i < stops.length; i += 1) {
             var label = i < self.contests.length ? self.contests[i]["name"] : "End";
-            result += "<div class=\"Timeline_tick\" style=\"left: " + (stops[i] * 100) + "%\">" +
+            result += "<div class=\"Timeline_tick\" data-position=\"" + stops[i] + "\"" +
+                      " style=\"left: " + (stops[i] * 100) + "%\">" +
                       "<div class=\"Timeline_tick_mark\"></div>" +
                       "<div class=\"Timeline_tick_label\">" + label + "</div></div>";
         }
@@ -203,9 +351,37 @@ export default new function () {
 
     ////// Playback
 
-    self.set_position = function (position) {
+    // Pull a scrubbed position onto a stop if it lands close enough to one
+    self.snap = function (position) {
+        // The thumb (14px wide) travels over the track minus its own width
+        var travel = self.slider_el.width() - 14;
+        if (travel <= 0) {
+            return position;
+        }
+
+        var threshold = SNAP_PIXELS / travel;
+        var stops = self.get_stops();
+        var best = position;
+        var best_distance = threshold;
+
+        for (var i = 0; i < stops.length; i += 1) {
+            var distance = Math.abs(stops[i] - position);
+            if (distance <= best_distance) {
+                best = stops[i];
+                best_distance = distance;
+            }
+        }
+
+        return best;
+    };
+
+    // skip_apply postpones the (expensive) scoreboard update; used during
+    // playback, where on_frame applies it at a throttled pace
+    self.set_position = function (position, skip_apply) {
         self.position = Math.min(Math.max(position, 0), 1);
-        self.apply_time(self.get_time(self.position));
+        if (!skip_apply) {
+            self.apply_time(self.get_time(self.position));
+        }
         self.update_ui();
     };
 
@@ -260,6 +436,8 @@ export default new function () {
 
         self.playing = false;
         window.cancelAnimationFrame(self.frame_request);
+        // Catch up on a scoreboard update the playback loop may have deferred
+        self.apply_time(self.get_time(self.position));
         self.update_ui();
     };
 
@@ -270,21 +448,28 @@ export default new function () {
 
         if (self.last_frame === null) {
             self.last_frame = timestamp;
+            self.last_apply = timestamp;
         }
 
         var delta = timestamp - self.last_frame;
-        if (delta >= MIN_FRAME_INTERVAL) {
-            self.last_frame = timestamp;
-            self.advance(delta / 1000 * BASE_RATE * SPEEDS[self.speed_idx]);
+        self.last_frame = timestamp;
+
+        // The thumb and the label move every frame, but the scoreboard is
+        // only recomputed at a throttled pace since that's expensive
+        var apply = timestamp - self.last_apply >= MIN_FRAME_INTERVAL;
+        if (apply) {
+            self.last_apply = timestamp;
         }
+
+        self.advance(delta / 1000 * BASE_RATE * SPEEDS[self.speed_idx], !apply);
 
         if (self.playing) {
             self.frame_request = window.requestAnimationFrame(self.on_frame);
         }
     };
 
-    // Move forward by the given amount of contest seconds
-    self.advance = function (seconds) {
+    // Move by the given amount of contest seconds (may be negative)
+    self.advance = function (seconds, skip_apply) {
         var n = self.contests.length;
         var idx = Math.min(Math.floor(self.position * n), n - 1);
         var elapsed = (self.position * n - idx) *
@@ -295,13 +480,18 @@ export default new function () {
             idx += 1;
         }
 
+        while (idx > 0 && elapsed < 0) {
+            idx -= 1;
+            elapsed += self.contests[idx]["end"] - self.contests[idx]["begin"];
+        }
+
         var duration = self.contests[idx]["end"] - self.contests[idx]["begin"];
 
         if (idx == n - 1 && elapsed >= duration) {
             self.set_position(1);
             self.pause();
         } else {
-            self.set_position((idx + elapsed / duration) / n);
+            self.set_position((idx + elapsed / duration) / n, skip_apply);
         }
     };
 
@@ -310,10 +500,13 @@ export default new function () {
 
     self.update_ui = function () {
         self.slider_el.val(Math.round(self.position * SLIDER_STEPS));
+        // The fill should end under the thumb's center, and the thumb (14px
+        // wide) travels over the track minus its own width
+        self.slider_el.css("--Timeline_fill",
+                           "calc(7px + " + self.position + " * (100% - 14px))");
 
-        $("#Timeline").toggleClass("live", self.position < 1);
-        $("#Timeline_play").text(self.playing ? "❚❚" : "▶")
-            .attr("title", self.playing ? "Pause" : "Play");
+        $("#Timeline_play").toggleClass("playing", self.playing)
+            .attr("title", self.playing ? "Pause (Space/K)" : "Play (Space/K)");
         $("#Timeline_speed").text(SPEEDS[self.speed_idx] + "\u00D7");
         $("#Timeline_label").text(self.format_position());
     };

@@ -116,6 +116,15 @@ export default new function () {
         self.tbody_el.on('webkitAnimationEnd', 'tr', function(event) {
             $(this).removeClass("score_up score_down");
         });
+
+        // Cleanup for the playback effects (see the section further down)
+        self.tbody_el.on("animationend", "td.score", function () {
+            $(this).removeClass("cell_up cell_down");
+        });
+
+        self.tbody_el.on("transitionend", "tr", function () {
+            this.style.transition = "";
+        });
     };
 
 
@@ -291,7 +300,7 @@ export default new function () {
         var result = " \
 <tr class=\"user" + (user["selected"] > 0 ? " selected color" + user["selected"] : "") + (self.is_filtered_out(user) ? " filtered_out" : "") + "\" data-user=\"" + user["key"] + "\"> \
     <td class=\"sel\"></td> \
-    <td class=\"rank medal-" + Config.get_medal(user["rank"]) + "\">" + self.format_rank(user) + "</td> \
+    <td class=\"rank medal-" + Config.get_medal(user["rank"]) + "\"><span class=\"rank_label\">" + self.format_rank(user) + "</span></td> \
     <td colspan=\"10\" class=\"f_name\">" + escapeHTML(user["f_name"]) + "</td> \
     <td colspan=\"10\" class=\"l_name\">" + escapeHTML(user["l_name"]) + "</td> \
     <td class=\"user_id\">" + user["display_key"] + "</td>";
@@ -420,6 +429,28 @@ export default new function () {
     };
 
 
+    // Local ranks (as displayed under the current sorting and filtering) for
+    // all users at once, keyed by user id. The timeline snapshots this
+    // before and after a playback batch to compute rank deltas.
+    self.get_local_ranks = function () {
+        const sort_key = self.sort_key;
+        const list = self.filtering
+            ? self.user_list.filter(u => !self.is_filtered_out(u))
+            : self.user_list;
+
+        const sorted = list.slice().sort((a, b) => b[sort_key] - a[sort_key]);
+
+        var result = new Object();
+        var rank = 1;
+        for (var i = 0; i < sorted.length; i += 1) {
+            if (i > 0 && sorted[i][sort_key] < sorted[i - 1][sort_key]) {
+                rank = i + 1;
+            }
+            result[sorted[i]["key"]] = rank;
+        }
+        return result;
+    };
+
     // Get the rank for the current scoreboard order
     self.get_local_rank = function (user) {
         const sort_key = self.sort_key;
@@ -446,11 +477,13 @@ export default new function () {
         }
     }
 
-    // Update the rank cell for the given user
+    // Update the rank cell for the given user. Only the label span is
+    // rewritten: the cell also hosts the transient rank-delta badge, which
+    // a .text() on the cell itself would destroy.
     self.update_rank = function (user) {
-        $(user.row).find(".rank")
-            .text(self.format_rank(user))
-            .attr("class", "rank medal-" + Config.get_medal(user["rank"]));
+        var $rank = $(user.row).children("td.rank");
+        $rank.attr("class", "rank medal-" + Config.get_medal(user["rank"]));
+        $rank.children(".rank_label").text(self.format_rank(user));
     }
 
     // Rewrite all the score cells of the given user
@@ -484,14 +517,17 @@ export default new function () {
 
         list.sort(self.compare_users);
 
-        var fragment = document.createDocumentFragment();
+        // Only move the rows that are out of place: re-inserting a row
+        // restarts its CSS animations, so rows that didn't move must not be
+        // touched (and this is much cheaper during playback, too)
+        var tbody = self.tbody_el[0];
         for (const [idx, user] of list.entries()) {
             user["index"] = idx;
-            fragment.appendChild(user["row"]);
+            if (tbody.children[idx] !== user["row"]) {
+                tbody.insertBefore(user["row"], tbody.children[idx] || null);
+            }
             self.update_rank(user);
         }
-
-        self.tbody_el.append(fragment);
     };
 
 
@@ -593,7 +629,7 @@ export default new function () {
     self.rank_handler = function (u_id, user) {
         var $row = $(user["row"]);
 
-        $row.children("td.rank").text(self.format_rank(user));
+        $row.children("td.rank").children(".rank_label").text(self.format_rank(user));
     };
 
 
@@ -622,5 +658,138 @@ export default new function () {
         var $frame = $("#InnerFrame");
         var scroll = $row.position().top + $row.height() / 2 - $frame.height() / 2;
         $frame.scrollTop(scroll);
+    };
+
+
+    ////// Playback effects
+    //
+    // Transient, viewport-gated bits of feedback used by the timeline while
+    // replaying the contest: a flash on a score cell that changed, a little
+    // rank-delta badge, and rows sliding to their new position (FLIP).
+
+    // The currently visible vertical span, in row-offsetTop coordinates
+    // (i.e. relative to the table, which is what tr.offsetTop yields)
+    self.visible_range = function () {
+        var frame = $("#InnerFrame")[0];
+        var table_top = $("#Scoreboard")[0].offsetTop;
+
+        return {
+            "top": frame.scrollTop - table_top,
+            "bottom": frame.scrollTop + frame.clientHeight - table_top
+        };
+    };
+
+    self.is_row_visible = function (user, range) {
+        var row = user["row"];
+        return row.offsetTop + row.offsetHeight > range["top"] &&
+               row.offsetTop < range["bottom"];
+    };
+
+    // One-shot flash on the task cell whose score just changed
+    self.flash_cell = function (user, t_id, direction) {
+        var cell = $(user["row"]).children("td.task[data-task=" + t_id + "]")[0];
+        if (cell === undefined) {
+            return;
+        }
+
+        var cls = direction > 0 ? "cell_up" : "cell_down";
+        if (cell.classList.contains(cls)) {
+            cell.classList.remove(cls);
+            // Force a reflow so that re-adding the class restarts the flash
+            void cell.offsetWidth;
+        }
+        cell.classList.remove("cell_up", "cell_down");
+        cell.classList.add(cls);
+    };
+
+    // Show a fading "climbed/dropped n places" badge in the gutter left of
+    // the row. It anchors to the rank cell — not the sel cell, whose
+    // opacity:0 would make it invisible — and the CSS offsets it past the
+    // sel column into the gutter. If a badge is already showing, fold the
+    // new movement into it in place (its animation must not restart, or
+    // rapid rank changes flash constantly).
+    self.show_rank_delta = function (user, old_rank, new_rank) {
+        var $anchor = $(user["row"]).children("td.rank");
+        var $badge = $anchor.children(".rank_delta");
+
+        var from = $badge.length > 0 ? $badge.data("from") : old_rank;
+        var delta = from - new_rank;
+
+        if (delta == 0) {
+            $badge.remove();
+            return;
+        }
+
+        if ($badge.length == 0) {
+            $badge = $("<span></span>").appendTo($anchor).data("from", from);
+
+            // Animate via the Web Animations API rather than CSS: the row is
+            // re-inserted whenever it moves in the standings, which restarts
+            // CSS animations (leaving the badge stuck alive), while WAAPI
+            // animations survive DOM moves and reliably finish
+            var animation = $badge[0].animate([
+                {"opacity": 0, "transform": "translateY(calc(-50% + 2px))"},
+                {"opacity": 1, "transform": "translateY(-50%)", "offset": 0.15},
+                {"opacity": 1, "transform": "translateY(-50%)", "offset": 0.7},
+                {"opacity": 0, "transform": "translateY(calc(-50% - 3px))"}
+            ], {"duration": 2000, "easing": "ease-out", "fill": "forwards"});
+
+            animation.onfinish = function () {
+                $badge.remove();
+            };
+        }
+
+        $badge.attr("class", "rank_delta " + (delta > 0 ? "up" : "down"))
+            .text((delta > 0 ? "\u25B2" : "\u25BC") + Math.abs(delta));
+    };
+
+    // Record every row's vertical position; pass the result to animate_sort
+    // after re-sorting to slide the rows from where they were
+    self.measure_rows = function () {
+        var result = new Object();
+        for (const user of self.user_list) {
+            result[user["key"]] = user["row"].offsetTop;
+        }
+        return result;
+    };
+
+    self.animate_sort = function (before) {
+        var range = self.visible_range();
+        var moved = new Array();
+
+        for (const user of self.user_list) {
+            var row = user["row"];
+            var delta = before[user["key"]] - row.offsetTop;
+            if (delta == 0) {
+                continue;
+            }
+
+            // Only rows that are (or were) in the viewport get to slide
+            var was_visible = before[user["key"]] + row.offsetHeight > range["top"] &&
+                              before[user["key"]] < range["bottom"];
+            if (!was_visible && !self.is_row_visible(user, range)) {
+                continue;
+            }
+
+            moved.push([row, delta]);
+        }
+
+        // A stampede of sliding rows cannot be followed anyway
+        if (moved.length == 0 || moved.length > 40) {
+            return;
+        }
+
+        for (const [row, delta] of moved) {
+            row.style.transition = "none";
+            row.style.transform = "translateY(" + delta + "px)";
+        }
+
+        // Force a reflow so the starting offsets take hold before the slide
+        void self.tbody_el[0].offsetWidth;
+
+        for (const [row] of moved) {
+            row.style.transition = "transform 0.25s ease-out";
+            row.style.transform = "";
+        }
     };
 };

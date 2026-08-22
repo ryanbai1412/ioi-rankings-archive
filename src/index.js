@@ -24,6 +24,7 @@ import TeamSearch from "./TeamSearch.js";
 import Overview from "./Overview.js";
 import Scoreboard from "./Scoreboard.js";
 import Timeline from "./Timeline.js";
+import Follow from "./Follow.js";
 
 if (!window.console) {
     window.console = new Object();
@@ -46,6 +47,14 @@ if (!window.console.error) {
 }
 
 $(document).ready(function() {
+    // Expose the scrollbar's width so non-scrolling elements (the timeline)
+    // can reserve the same gutter and stay aligned with the scoreboard
+    var frame = document.getElementById("InnerFrame");
+    if (frame) {
+        document.documentElement.style.setProperty(
+            "--scrollbar-width", (frame.offsetWidth - frame.clientWidth) + "px");
+    }
+
     DataStore.init(function() {
         HistoryStore.init();
         UserDetail.init();
@@ -56,5 +65,6 @@ $(document).ready(function() {
         Overview.init();
         Scoreboard.init();
         Timeline.init();
+        Follow.init();
     });
 });
