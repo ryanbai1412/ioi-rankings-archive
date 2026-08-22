@@ -76,20 +76,33 @@ export default new function () {
         });
 
         // The info buttons show their explanation in a shared tooltip area
-        // at the bottom of the panel; clicking the same button again (or
-        // another one) hides or replaces it. Click-based so it also works
-        // on touch screens, where there is no hover.
+        // at the bottom of the panel: on hover where the device supports
+        // it, and by tapping (toggling) on touch screens, where there is
+        // no hover.
         var tooltip_el = $("#Settings_tooltip");
-        self.panel_el.find(".Settings_info").text("i").on("click", function () {
-            var button = $(this);
-            var active = button.hasClass("active");
-            self.panel_el.find(".Settings_info").removeClass("active");
-            tooltip_el.toggleClass("visible", !active);
-            if (!active) {
+        var info_els = self.panel_el.find(".Settings_info").text("i");
+
+        var show_info = function (button) {
+            info_els.removeClass("active");
+            tooltip_el.toggleClass("visible", button !== undefined);
+            if (button !== undefined) {
                 button.addClass("active");
-                tooltip_el.text(this.dataset["info"]);
+                tooltip_el.text(button[0].dataset["info"]);
             }
-        });
+        };
+
+        if (window.matchMedia("(hover: hover)").matches) {
+            info_els.on("mouseenter", function () {
+                show_info($(this));
+            }).on("mouseleave", function () {
+                show_info(undefined);
+            });
+        } else {
+            info_els.on("click", function () {
+                var active = $(this).hasClass("active");
+                show_info(active ? undefined : $(this));
+            });
+        }
 
         self.update_warning();
     };
