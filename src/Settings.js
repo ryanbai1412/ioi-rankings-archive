@@ -198,11 +198,10 @@ export default new function () {
         }
     };
 
-    // The performance warning under the animation toggles, shown when one
-    // of them is enabled on a mobile device
+    // The performance warning under the rank-badges toggle, shown when it
+    // is enabled on a mobile device
     self.update_warning = function () {
-        var show = self.is_mobile() &&
-                   (self.get("rank_deltas") || self.get("score_flashes"));
+        var show = self.is_mobile() && self.get("rank_deltas");
         $("#Settings_warning").toggleClass("visible", show);
     };
 
