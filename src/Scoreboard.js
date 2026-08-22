@@ -832,23 +832,13 @@ export default new function () {
         }
     };
 
-    // Show a "climbed/dropped n places" badge in the gutter left of the row.
-    // Each row carries a permanent, normally-invisible badge span (created in
-    // make_row): only its text/class/opacity are touched here — inserting
-    // and removing badge elements on every replay tick invalidates the row's
-    // layout. The "badge_style" setting picks how it appears: "static"
-    // (plain show/hide, fastest — any animation running on an element inside
-    // the table makes WebKit redo style/animation work every frame),
-    // "fade" (short CSS opacity transition) or "waapi" (the full fade
-    // in/out animation). If a badge is already showing, fold the new
-    // movement into it in place (its hide timer must not restart, or rapid
-    // rank changes keep it alive forever).
-    self.hide_rank_delta = function (user) {
-        user["delta_badge"].style.opacity = "";
-        user["delta_timer"] = undefined;
-        user["delta_anim"] = undefined;
-    };
-
+    // Show a fading "climbed/dropped n places" badge in the gutter left of
+    // the row. Each row carries a permanent, normally-invisible badge span
+    // (created in make_row): only its text/class and animation are touched
+    // here, as inserting and removing badge elements on every replay tick
+    // invalidates the row's layout. If a badge is already showing, fold the
+    // new movement into it in place (its animation must not restart, or
+    // rapid rank changes flash constantly).
     self.show_rank_delta = function (user, old_rank, new_rank) {
         var badge = user["delta_badge"];
         if (badge === undefined || badge.parentNode === null ||
@@ -861,46 +851,32 @@ export default new function () {
             return;
         }
 
-        var active = user["delta_timer"] !== undefined;
+        var active = user["delta_anim"] !== undefined &&
+                     user["delta_anim"].playState === "running";
         var from = active ? user["delta_from"] : old_rank;
         var delta = from - new_rank;
 
         if (delta == 0) {
             if (active) {
-                clearTimeout(user["delta_timer"]);
-                if (user["delta_anim"] !== undefined) {
-                    user["delta_anim"].cancel();
-                }
-                self.hide_rank_delta(user);
+                user["delta_anim"].cancel();
             }
             return;
         }
 
         if (!active) {
-            var style = Settings.get_choice("badge_style", "static");
             user["delta_from"] = from;
-            user["delta_timer"] = window.setTimeout(function () {
-                self.hide_rank_delta(user);
-            }, 2000);
 
-            if (style == "waapi") {
-                // The badge is opacity: 0 at rest, so it disappears when the
-                // animation ends. WAAPI rather than CSS animations: the row
-                // is re-inserted whenever it moves in the standings, which
-                // restarts CSS animations (leaving the badge stuck alive),
-                // while WAAPI animations survive DOM moves.
-                badge.style.transition = "";
-                user["delta_anim"] = badge.animate([
-                    {"opacity": 0, "transform": "translateY(2px)"},
-                    {"opacity": 1, "transform": "translateY(0)", "offset": 0.15},
-                    {"opacity": 1, "transform": "translateY(0)", "offset": 0.7},
-                    {"opacity": 0, "transform": "translateY(-3px)"}
-                ], {"duration": 2000, "easing": "ease-out"});
-            } else {
-                badge.style.transition =
-                    style == "fade" ? "opacity 0.3s ease-out" : "";
-                badge.style.opacity = "1";
-            }
+            // The badge is opacity: 0 at rest, so it disappears when the
+            // animation ends. WAAPI rather than CSS animations: the row is
+            // re-inserted whenever it moves in the standings, which restarts
+            // CSS animations (leaving the badge stuck alive), while WAAPI
+            // animations survive DOM moves and reliably finish.
+            user["delta_anim"] = badge.animate([
+                {"opacity": 0, "transform": "translateY(2px)"},
+                {"opacity": 1, "transform": "translateY(0)", "offset": 0.15},
+                {"opacity": 1, "transform": "translateY(0)", "offset": 0.7},
+                {"opacity": 0, "transform": "translateY(-3px)"}
+            ], {"duration": 2000, "easing": "ease-out"});
         }
 
         badge.className = "rank_delta " + (delta > 0 ? "up" : "down");

@@ -1329,9 +1329,8 @@ abbr {
    pushed past the 2em sel column (the sel cell itself is opacity: 0, so the
    badge cannot live inside it) */
 .rank_delta {
-    /* Every row carries one, permanently; Scoreboard.show_rank_delta
-       reveals it (inline opacity, transition or animation per the
-       badge_style setting) */
+    /* Every row carries one, permanently; only its fade-in/out animation
+       (Scoreboard.show_rank_delta) ever makes it visible */
     opacity: 0;
     position: absolute;
     top: calc(50% - 0.6em);
