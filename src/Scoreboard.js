@@ -133,8 +133,15 @@ export default new function () {
         self.update_filter_ui();
 
         // Create callbacks for UserPanel
-        self.tbody_el.on("click", "td.name, td.user_id", function () {
-            UserDetail.show($(this).parent().data("user"));
+        // ⌘/Ctrl/Shift/middle click opens the contestant (#user_id) in a new tab, like a link would.
+        self.tbody_el.on("click auxclick", "td.name, td.user_id", function (e) {
+            var user_id = $(this).parent().data("user");
+            if (e.button === 1 || e.metaKey || e.ctrlKey || e.shiftKey) {
+                e.preventDefault();
+                window.open("#" + user_id, "_blank", "noopener");
+            } else if (e.type === "click" && e.button === 0) {
+                UserDetail.show(user_id);
+            }
         });
 
         // Create callbacks for animation-end
